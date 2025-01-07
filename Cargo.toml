@@ -5,8 +5,9 @@ edition = "2021"
 
 
 [workspace]
-members = ["embedded-nand-async"]
+members = ["embedded-nand-async", "winbond/w25n"]
 
 [dependencies]
+defmt = "0.3.10"
 embedded-hal = "1.0.0"
-num-traits = "0.2.19"
+embedded-hal-async = "1.0.0"

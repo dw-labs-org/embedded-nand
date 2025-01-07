@@ -1,8 +1,6 @@
-use std::fmt::Debug;
-
-use embedded_hal::spi::{self, SpiDevice};
-
 use crate::traits::{ErrorType, NandFlash, NandFlashError, ReadNandFlash};
+use core::fmt::Debug;
+use embedded_hal::spi::{self, SpiDevice};
 
 #[derive(Debug)]
 /// Error type for SPI NAND flash operations
