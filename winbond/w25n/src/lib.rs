@@ -19,31 +19,6 @@ impl<const N: u32> W25N<N> {
     pub fn new() -> Self {
         Self()
     }
-    pub fn read_status_register_2<SPI: SpiDevice>(
-        &self,
-        spi: &mut SPI,
-    ) -> Result<u8, SpiFlashError<SPI>> {
-        let mut buf = [
-            <W25N<N> as SpiNandRead<SPI>>::STATUS_REGISTER_READ_COMMAND,
-            0xB0,
-            0,
-        ];
-        spi_transfer_in_place(spi, &mut buf)?;
-        Ok(buf[2])
-    }
-
-    pub fn read_status_register_3<SPI: SpiDevice>(
-        &self,
-        spi: &mut SPI,
-    ) -> Result<u8, SpiFlashError<SPI>> {
-        let mut buf = [
-            <W25N<N> as SpiNandRead<SPI>>::STATUS_REGISTER_READ_COMMAND,
-            0xC0,
-            0,
-        ];
-        spi_transfer_in_place(spi, &mut buf)?;
-        Ok(buf[2])
-    }
 }
 
 impl<const N: u32> Default for W25N<N> {
