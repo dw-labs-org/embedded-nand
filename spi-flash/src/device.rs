@@ -14,18 +14,19 @@ use crate::{
 use super::{address::ColumnAddress, JedecID};
 
 #[derive(Debug, defmt::Format)]
-pub struct SpiFlash<SPI, D> {
+pub struct SpiFlash<SPI, D, const N: usize> {
     pub spi: SPI,
     pub device: D,
+    // page_size: usize,
 }
 
-impl<SPI, D> SpiFlash<SPI, D> {
+impl<SPI, D, const N: usize> SpiFlash<SPI, D, N> {
     pub fn new(spi: SPI, device: D) -> Self {
         SpiFlash { spi, device }
     }
 }
 
-impl<SPI: SpiDevice, D: SpiNandBlocking<SPI>> SpiFlash<SPI, D> {
+impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D, N> {
     /// Get the Jedec ID of the flash device
     pub fn jedec_blocking(&mut self) -> Result<JedecID, SpiFlashError<SPI>> {
         self.device.read_jedec_id(&mut self.spi)
@@ -150,9 +151,33 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI>> SpiFlash<SPI, D> {
             Ok(())
         }
     }
+
+    /// Read a whole page from the device
+    /// This will read the page into the device buffer/register and then read it to the buffer
+    pub fn read_page_blocking(
+        &mut self,
+        address: PageAddress,
+        buf: &mut [u8; N],
+    ) -> Result<(), SpiFlashError<SPI>> {
+        self.page_read_blocking(address)?;
+        self.page_read_buffer_blocking(ColumnAddress(0), buf)
+    }
+
+    /// Write a whole page to the device
+    /// This will write the page to the buffer/register and then write it to the page
+    pub fn write_page_blocking(
+        &mut self,
+        address: PageAddress,
+        buf: &[u8; N],
+    ) -> Result<(), SpiFlashError<SPI>> {
+        self.program_load_blocking(ColumnAddress(0), buf)?;
+        self.program_execute_blocking(address)
+    }
 }
 
-impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI>> SpiFlash<SPI, D> {
+impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: usize>
+    SpiFlash<SPI, D, N>
+{
     /// Get the Jedec ID of the flash device
     pub async fn jedec(&mut self) -> Result<JedecID, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.read_jedec_id(&mut self.spi).await
@@ -272,9 +297,20 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI>> SpiFlash<SPI
     ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.erase_failed(&mut self.spi).await
     }
+
+    /// Read a whole page from the device
+    /// This will read the page into the device buffer/register and then read it to the buffer
+    pub async fn read_page(
+        &mut self,
+        address: PageAddress,
+        buf: &mut [u8; N],
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
+        self.page_read(address).await?;
+        self.page_read_buffer(ColumnAddress(0), buf).await
+    }
 }
 
-impl<SPI: SpiDevice, D> ErrorType for SpiFlash<SPI, D> {
+impl<SPI: SpiDevice, D, const N: usize> ErrorType for SpiFlash<SPI, D, N> {
     type Error = SpiFlashError<SPI>;
 }
 
@@ -283,7 +319,9 @@ impl<SPI: SpiDevice> NandFlashError for SpiFlashError<SPI> {
         todo!()
     }
 }
-impl<SPI: SpiDevice, D: SpiNandBlocking<SPI>> ReadNandFlash for SpiFlash<SPI, D> {
+impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> ReadNandFlash
+    for SpiFlash<SPI, D, N>
+{
     const READ_SIZE: usize = D::READ_SIZE as usize;
 
     fn read(&mut self, offset: u32, mut bytes: &mut [u8]) -> Result<(), Self::Error> {
@@ -327,7 +365,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI>> ReadNandFlash for SpiFlash<SPI, D>
     }
 }
 
-impl<SPI: SpiDevice, D: SpiNandBlocking<SPI>> NandFlash for SpiFlash<SPI, D> {
+impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for SpiFlash<SPI, D, N> {
     const WRITE_SIZE: usize = D::PAGE_SIZE as usize;
     const ERASE_SIZE: usize = D::BLOCK_SIZE as usize;
 

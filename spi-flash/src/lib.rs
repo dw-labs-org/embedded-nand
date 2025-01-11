@@ -1,14 +1,16 @@
 #![no_std]
 
+use core::usize;
+
 pub mod address;
 pub mod async_trait;
 pub mod blocking;
 pub mod device;
 
-pub trait SpiNand {
+pub trait SpiNand<const N: usize> {
     // Device layout
     /// The size of a page in bytes
-    const PAGE_SIZE: u32;
+    const PAGE_SIZE: u32 = N as u32;
     /// The number of pages in a block
     const PAGES_PER_BLOCK: u32;
     /// The number of blocks in the device

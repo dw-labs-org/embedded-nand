@@ -20,7 +20,7 @@ pub enum SpiFlashError<SPI: SpiDevice> {
     ReadFailed,
 }
 
-pub trait SpiNandBlocking<SPI: SpiDevice>: SpiNand {
+pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     /// Issue a reset command to the flash device
     fn reset(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::RESET_COMMAND])

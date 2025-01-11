@@ -21,7 +21,7 @@ pub enum SpiFlashErrorASync<SPI: SpiDevice> {
 }
 
 #[allow(async_fn_in_trait)]
-pub trait SpiNandAsync<SPI: SpiDevice>: SpiNand {
+pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     /// Issue a reset command to the flash device
     async fn reset(&self, spi: &mut SPI) -> Result<(), SpiFlashErrorASync<SPI>> {
         spi_write(spi, &[Self::RESET_COMMAND]).await
