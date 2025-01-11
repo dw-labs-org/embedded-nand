@@ -154,43 +154,43 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI>> SpiFlash<SPI, D> {
 
 impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI>> SpiFlash<SPI, D> {
     /// Get the Jedec ID of the flash device
-    pub async fn jedec(&mut self) -> Result<JedecID, crate::async_trait::SpiFlashError<SPI>> {
+    pub async fn jedec(&mut self) -> Result<JedecID, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.read_jedec_id(&mut self.spi).await
     }
 
     /// Reset the flash device
-    pub async fn reset(&mut self) -> Result<(), crate::async_trait::SpiFlashError<SPI>> {
+    pub async fn reset(&mut self) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.reset(&mut self.spi).await
     }
 
     /// Read status register 1
     pub async fn read_status_register_1(
         &mut self,
-    ) -> Result<u8, crate::async_trait::SpiFlashError<SPI>> {
+    ) -> Result<u8, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.read_status_register_1(&mut self.spi).await
     }
 
     /// Read status register 2
     pub async fn read_status_register_2(
         &mut self,
-    ) -> Result<u8, crate::async_trait::SpiFlashError<SPI>> {
+    ) -> Result<u8, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.read_status_register_2(&mut self.spi).await
     }
 
     /// Read status register 3
     pub async fn read_status_register_3(
         &mut self,
-    ) -> Result<u8, crate::async_trait::SpiFlashError<SPI>> {
+    ) -> Result<u8, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.read_status_register_3(&mut self.spi).await
     }
 
     /// Check if the device is busy
-    pub async fn is_busy(&mut self) -> Result<bool, crate::async_trait::SpiFlashError<SPI>> {
+    pub async fn is_busy(&mut self) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.is_busy(&mut self.spi).await
     }
 
     /// Wait until the device is ready
-    pub async fn wait_ready(&mut self) -> Result<(), crate::async_trait::SpiFlashError<SPI>> {
+    pub async fn wait_ready(&mut self) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         while self.is_busy().await? {}
         Ok(())
     }
@@ -199,7 +199,7 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI>> SpiFlash<SPI
     pub async fn page_read(
         &mut self,
         address: PageAddress,
-    ) -> Result<bool, crate::async_trait::SpiFlashError<SPI>> {
+    ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.page_read(&mut self.spi, address).await?;
         self.wait_ready().await?;
         let ecc = self.device.check_ecc(&mut self.spi).await?;
@@ -207,7 +207,7 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI>> SpiFlash<SPI
             super::ECCStatus::Ok => Ok(true),
             super::ECCStatus::Corrected => Ok(true),
             super::ECCStatus::Failing => Ok(false),
-            super::ECCStatus::Failed => Err(crate::async_trait::SpiFlashError::ReadFailed),
+            super::ECCStatus::Failed => Err(crate::async_trait::SpiFlashErrorASync::ReadFailed),
         }
     }
 
@@ -216,17 +216,21 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI>> SpiFlash<SPI
         &mut self,
         ca: ColumnAddress,
         buf: &mut [u8],
-    ) -> Result<(), crate::async_trait::SpiFlashError<SPI>> {
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.page_read_buffer(&mut self.spi, ca, buf).await
     }
 
     /// Enable writing to the flash device
-    pub async fn write_enable(&mut self) -> Result<(), crate::async_trait::SpiFlashError<SPI>> {
+    pub async fn write_enable(
+        &mut self,
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.write_enable(&mut self.spi).await
     }
 
     /// Disable writing to the flash device
-    pub async fn write_disable(&mut self) -> Result<(), crate::async_trait::SpiFlashError<SPI>> {
+    pub async fn write_disable(
+        &mut self,
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.write_disable(&mut self.spi).await
     }
 
@@ -236,11 +240,11 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI>> SpiFlash<SPI
     pub async fn erase_block(
         &mut self,
         page_address: PageAddress,
-    ) -> Result<(), crate::async_trait::SpiFlashError<SPI>> {
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.erase_block(&mut self.spi, page_address).await?;
         self.wait_ready().await?;
         if self.erase_failed().await? {
-            Err(crate::async_trait::SpiFlashError::EraseFailed)
+            Err(crate::async_trait::SpiFlashErrorASync::EraseFailed)
         } else {
             Ok(())
         }
@@ -249,19 +253,23 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI>> SpiFlash<SPI
     /// Check if writing to the device is enabled
     pub async fn is_write_enabled(
         &mut self,
-    ) -> Result<bool, crate::async_trait::SpiFlashError<SPI>> {
+    ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.is_write_enabled(&mut self.spi).await
     }
 
     /// Check if programming failed
     /// This is only valid after a write operation
-    pub async fn program_failed(&mut self) -> Result<bool, crate::async_trait::SpiFlashError<SPI>> {
+    pub async fn program_failed(
+        &mut self,
+    ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.program_failed(&mut self.spi).await
     }
 
     /// Check if erasing failed
     /// This is only valid after an erase operation
-    pub async fn erase_failed(&mut self) -> Result<bool, crate::async_trait::SpiFlashError<SPI>> {
+    pub async fn erase_failed(
+        &mut self,
+    ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.erase_failed(&mut self.spi).await
     }
 }
