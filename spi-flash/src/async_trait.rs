@@ -20,6 +20,7 @@ pub enum SpiFlashErrorASync<SPI: SpiDevice> {
     ReadFailed,
 }
 
+#[allow(async_fn_in_trait)]
 pub trait SpiNandAsync<SPI: SpiDevice>: SpiNand {
     /// Issue a reset command to the flash device
     async fn reset(&self, spi: &mut SPI) -> Result<(), SpiFlashErrorASync<SPI>> {
