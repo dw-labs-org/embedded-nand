@@ -1,10 +1,5 @@
-#![no_std]
-
 use embedded_hal::spi::SpiDevice;
-use embedded_nand::spiflash::{
-    utils::{spi_transfer, spi_transfer_in_place},
-    JedecID, SpiFlashError, SpiNandRead, SpiNandWrite,
-};
+use spi_flash::{utils::spi_transfer, JedecID, SpiFlashError, SpiNandRead, SpiNandWrite};
 
 /// Concrete type that implements all the flash device features
 pub struct W25N<const N: u32>();

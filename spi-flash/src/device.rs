@@ -1,11 +1,11 @@
 use core::fmt::Debug;
 
 use embedded_hal::spi::SpiDevice;
-
-use crate::{
-    nand::{ErrorType, NandFlash, NandFlashError, ReadNandFlash},
-    spiflash::{address::ByteAddress, PageAddress},
+use embedded_nand::{
+    BlockStatus, ErrorType, NandFlash, NandFlashError, NandFlashErrorKind, ReadNandFlash,
 };
+
+use crate::{address::ByteAddress, PageAddress};
 
 use super::{address::ColumnAddress, JedecID, SpiFlashError, SpiNandRead, SpiNandWrite};
 
@@ -58,9 +58,16 @@ impl<SPI: SpiDevice, D: SpiNandRead<SPI>> SpiFlash<SPI, D> {
 
     /// Read a page into the device buffer/register
     /// Wait for the device to be ready
-    pub fn page_read(&mut self, address: PageAddress) -> Result<(), SpiFlashError<SPI>> {
+    pub fn page_read(&mut self, address: PageAddress) -> Result<bool, SpiFlashError<SPI>> {
         self.device.page_read(&mut self.spi, address)?;
-        self.wait_ready()
+        self.wait_ready()?;
+        let ecc = self.device.check_ecc(&mut self.spi)?;
+        match ecc {
+            super::ECCStatus::Ok => Ok(true),
+            super::ECCStatus::Corrected => Ok(true),
+            super::ECCStatus::Failing => Ok(false),
+            super::ECCStatus::Failed => Err(SpiFlashError::ReadFailed),
+        }
     }
 
     /// Read bytes of a page from the device buffer/register starting from column address
@@ -142,7 +149,7 @@ impl<SPI: SpiDevice, D> ErrorType for SpiFlash<SPI, D> {
 }
 
 impl<SPI: SpiDevice> NandFlashError for SpiFlashError<SPI> {
-    fn kind(&self) -> crate::nand::NandFlashErrorKind {
+    fn kind(&self) -> NandFlashErrorKind {
         todo!()
     }
 }
@@ -151,7 +158,7 @@ impl<SPI: SpiDevice, D: SpiNandRead<SPI>> ReadNandFlash for SpiFlash<SPI, D> {
 
     fn read(&mut self, offset: u32, mut bytes: &mut [u8]) -> Result<(), Self::Error> {
         let ba = ByteAddress(offset);
-        let ca = ba.as_column_address(D::BLOCK_SIZE);
+        let ca = ba.as_column_address(D::PAGE_SIZE);
         let mut pa = ba.as_page_address(D::PAGE_SIZE);
         if ca.0 != 0 {
             // Not aligned to page
@@ -178,14 +185,14 @@ impl<SPI: SpiDevice, D: SpiNandRead<SPI>> ReadNandFlash for SpiFlash<SPI, D> {
         D::CAPACITY
     }
 
-    fn block_status(&mut self, address: u32) -> Result<crate::nand::BlockStatus, Self::Error> {
+    fn block_status(&mut self, address: u32) -> Result<BlockStatus, Self::Error> {
         if self
             .device
             .block_marked_bad(&mut self.spi, address.into())?
         {
-            Ok(crate::nand::BlockStatus::Failed)
+            Ok(BlockStatus::Failed)
         } else {
-            Ok(crate::nand::BlockStatus::Ok)
+            Ok(BlockStatus::Ok)
         }
     }
 }
@@ -208,7 +215,12 @@ impl<SPI: SpiDevice, D: SpiNandWrite<SPI>> NandFlash for SpiFlash<SPI, D> {
     }
 
     fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
-        todo!()
+        for chunk in bytes.chunks(D::PAGE_SIZE as usize) {
+            let pa = ByteAddress(offset).as_page_address(D::PAGE_SIZE);
+            self.program_load(0.into(), chunk)?;
+            self.program_execute(pa)?;
+        }
+        Ok(())
     }
 
     fn mark_bad(&mut self, address: u32) -> Result<(), Self::Error> {

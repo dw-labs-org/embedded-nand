@@ -1,0 +1,9 @@
+[package]
+name = "winbond"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embedded-hal = { version = "1.0.0", features = ["defmt-03"] }
+embedded-nand = { path = "../embedded-nand" }
+spi-flash = { path = "../spi-flash" }

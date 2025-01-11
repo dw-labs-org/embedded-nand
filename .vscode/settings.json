@@ -1,0 +1,6 @@
+{
+  "rust-analyzer.linkedProjects": [
+
+    "embedded-nand/Cargo.toml", "embedded-nand-async/Cargo.toml", "spi-flash/Cargo.toml", "winbond/Cargo.toml"
+  ]
+}

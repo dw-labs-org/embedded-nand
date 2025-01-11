@@ -6,6 +6,7 @@ pub mod address;
 pub mod device;
 pub mod utils;
 
+// #[cfg(target_feature = "defmt")]
 #[derive(defmt::Format)]
 pub enum SpiFlashError<SPI: SpiDevice> {
     /// Error from the SPI peripheral
@@ -16,6 +17,9 @@ pub enum SpiFlashError<SPI: SpiDevice> {
     /// Program failed.
     /// This can happen if the write is disabled, block is protected or the block has failed.
     ProgramFailed,
+    /// Read failed
+    /// This can happen due to an ECC error
+    ReadFailed,
 }
 
 pub trait SpiNandRead<SPI: SpiDevice> {
@@ -184,6 +188,12 @@ pub trait SpiNandWrite<SPI: SpiDevice>: SpiNandRead<SPI> {
     /// Check if erase failed
     fn erase_failed(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
         Ok((self.read_status_register_3(spi)? & 0x04) != 0)
+    }
+
+    /// Write to status register 1
+    /// This is used to set the block protection bits and status protection bits
+    fn write_status_register_1(&self, spi: &mut SPI, data: u8) -> Result<(), SpiFlashError<SPI>> {
+        spi_write(spi, &[Self::STATUS_REGISTER_WRITE_COMMAND, 0xA0, data])
     }
 
     /// Erase a block of flash memory

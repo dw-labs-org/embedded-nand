@@ -21,8 +21,8 @@ impl ByteAddress {
         PageAddress(self.0 / page_size)
     }
 
-    pub fn as_column_address(&self, block_size: u32) -> ColumnAddress {
-        ColumnAddress((self.0 % block_size) as u16)
+    pub fn as_column_address(&self, page_size: u32) -> ColumnAddress {
+        ColumnAddress((self.0 % page_size) as u16)
     }
 }
 
