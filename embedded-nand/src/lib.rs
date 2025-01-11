@@ -1,3 +1,4 @@
+#![no_std]
 pub trait NandFlashError {
     /// Convert a specific NAND flash error into a generic error kind
     fn kind(&self) -> NandFlashErrorKind;

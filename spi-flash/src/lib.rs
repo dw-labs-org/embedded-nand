@@ -1,3 +1,4 @@
+#![no_std]
 use address::{ColumnAddress, PageAddress};
 use embedded_hal::spi::{Operation, SpiDevice};
 use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
