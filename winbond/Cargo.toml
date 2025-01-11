@@ -5,5 +5,6 @@ edition = "2021"
 
 [dependencies]
 embedded-hal = { version = "1.0.0", features = ["defmt-03"] }
+embedded-hal-async = { version = "1.0.0", features = ["defmt-03"] }
 embedded-nand = { path = "../embedded-nand" }
 spi-flash = { path = "../spi-flash" }

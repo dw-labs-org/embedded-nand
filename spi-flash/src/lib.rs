@@ -1,6 +1,7 @@
 #![no_std]
 
 pub mod address;
+pub mod async_trait;
 pub mod blocking;
 pub mod device;
 

@@ -1,5 +1,6 @@
 use embedded_hal::spi::SpiDevice;
 use spi_flash::{
+    async_trait::SpiNandAsync,
     blocking::{utils::spi_transfer, SpiFlashError, SpiNandBlocking},
     JedecID, SpiNand,
 };
@@ -35,6 +36,22 @@ impl<SPI: SpiDevice, const N: u32> SpiNandBlocking<SPI> for W25N<N> {
     fn read_jedec_id(&self, spi: &mut SPI) -> Result<JedecID, SpiFlashError<SPI>> {
         let mut buf = [0; 3];
         spi_transfer(spi, &mut buf, &[<W25N<N> as SpiNand>::JEDEC_COMMAND, 0, 0])?;
+        Ok(JedecID::new(buf[2], 1))
+    }
+}
+
+impl<SPI: embedded_hal_async::spi::SpiDevice, const N: u32> SpiNandAsync<SPI> for W25N<N> {
+    async fn read_jedec_id(
+        &self,
+        spi: &mut SPI,
+    ) -> Result<JedecID, spi_flash::async_trait::SpiFlashError<SPI>> {
+        let mut buf = [0; 3];
+        spi_flash::async_trait::utils::spi_transfer(
+            spi,
+            &mut buf,
+            &[<W25N<N> as SpiNand>::JEDEC_COMMAND, 0, 0],
+        )
+        .await?;
         Ok(JedecID::new(buf[2], 1))
     }
 }
