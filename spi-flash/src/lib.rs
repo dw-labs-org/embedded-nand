@@ -4,7 +4,7 @@ pub mod address;
 pub mod blocking;
 pub mod device;
 
-pub trait SpiNandRead {
+pub trait SpiNand {
     // Device layout
     /// The size of a page in bytes
     const PAGE_SIZE: u32;
@@ -30,9 +30,6 @@ pub trait SpiNandRead {
     const PAGE_READ_COMMAND: u8 = 0x13;
     /// Command to read a page from the device buffer/register
     const PAGE_READ_BUFFER_COMMAND: u8 = 0x03;
-}
-
-pub trait SpiNandWrite: SpiNandRead {
     /// Enable writing to the flash device, including erasing
     const WRITE_ENABLE_COMMAND: u8 = 0x06;
     /// Disable writing to the flash device

@@ -2,7 +2,7 @@ use address::{ColumnAddress, PageAddress};
 use embedded_hal::spi::{Operation, SpiDevice};
 use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
 
-use crate::{address, ECCStatus, JedecID, SpiNandRead, SpiNandWrite};
+use crate::{address, ECCStatus, JedecID, SpiNand};
 
 // #[cfg(target_feature = "defmt")]
 #[derive(defmt::Format)]
@@ -20,7 +20,7 @@ pub enum SpiFlashError<SPI: SpiDevice> {
     ReadFailed,
 }
 
-pub trait SpiNandReadBlocking<SPI: SpiDevice>: SpiNandRead {
+pub trait SpiNandBlocking<SPI: SpiDevice>: SpiNand {
     /// Issue a reset command to the flash device
     fn reset(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::RESET_COMMAND])
@@ -119,9 +119,7 @@ pub trait SpiNandReadBlocking<SPI: SpiDevice>: SpiNandRead {
         self.page_read_buffer(spi, ColumnAddress(Self::PAGE_SIZE as u16), &mut buf)?;
         Ok(buf[0] != 0xFF)
     }
-}
 
-pub trait SpiNandWriteBlocking<SPI: SpiDevice>: SpiNandReadBlocking<SPI> + SpiNandWrite {
     /// Enable writing to the flash device
     fn write_enable(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::WRITE_ENABLE_COMMAND])
