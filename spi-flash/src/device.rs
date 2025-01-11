@@ -5,9 +5,12 @@ use embedded_nand::{
     BlockStatus, ErrorType, NandFlash, NandFlashError, NandFlashErrorKind, ReadNandFlash,
 };
 
-use crate::{address::ByteAddress, PageAddress};
+use crate::{
+    address::{ByteAddress, PageAddress},
+    blocking::{SpiFlashError, SpiNandReadBlocking, SpiNandWriteBlocking},
+};
 
-use super::{address::ColumnAddress, JedecID, SpiFlashError, SpiNandRead, SpiNandWrite};
+use super::{address::ColumnAddress, JedecID};
 
 #[derive(Debug, defmt::Format)]
 pub struct SpiFlash<SPI, D> {
@@ -21,7 +24,7 @@ impl<SPI, D> SpiFlash<SPI, D> {
     }
 }
 
-impl<SPI: SpiDevice, D: SpiNandRead<SPI>> SpiFlash<SPI, D> {
+impl<SPI: SpiDevice, D: SpiNandReadBlocking<SPI>> SpiFlash<SPI, D> {
     /// Get the Jedec ID of the flash device
     pub fn jedec(&mut self) -> Result<JedecID, SpiFlashError<SPI>> {
         self.device.read_jedec_id(&mut self.spi)
@@ -80,7 +83,7 @@ impl<SPI: SpiDevice, D: SpiNandRead<SPI>> SpiFlash<SPI, D> {
     }
 }
 
-impl<SPI: SpiDevice, D: SpiNandWrite<SPI>> SpiFlash<SPI, D> {
+impl<SPI: SpiDevice, D: SpiNandWriteBlocking<SPI>> SpiFlash<SPI, D> {
     /// Enable writing to the flash device
     pub fn write_enable(&mut self) -> Result<(), SpiFlashError<SPI>> {
         self.device.write_enable(&mut self.spi)
@@ -153,7 +156,7 @@ impl<SPI: SpiDevice> NandFlashError for SpiFlashError<SPI> {
         todo!()
     }
 }
-impl<SPI: SpiDevice, D: SpiNandRead<SPI>> ReadNandFlash for SpiFlash<SPI, D> {
+impl<SPI: SpiDevice, D: SpiNandReadBlocking<SPI>> ReadNandFlash for SpiFlash<SPI, D> {
     const READ_SIZE: usize = D::READ_SIZE as usize;
 
     fn read(&mut self, offset: u32, mut bytes: &mut [u8]) -> Result<(), Self::Error> {
@@ -197,7 +200,7 @@ impl<SPI: SpiDevice, D: SpiNandRead<SPI>> ReadNandFlash for SpiFlash<SPI, D> {
     }
 }
 
-impl<SPI: SpiDevice, D: SpiNandWrite<SPI>> NandFlash for SpiFlash<SPI, D> {
+impl<SPI: SpiDevice, D: SpiNandWriteBlocking<SPI>> NandFlash for SpiFlash<SPI, D> {
     const WRITE_SIZE: usize = D::PAGE_SIZE as usize;
     const ERASE_SIZE: usize = D::BLOCK_SIZE as usize;
 
