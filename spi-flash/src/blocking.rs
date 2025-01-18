@@ -151,6 +151,13 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         spi_write(spi, &[Self::STATUS_REGISTER_WRITE_COMMAND, 0xA0, data])
     }
 
+    /// Disable block protection
+    /// Writes bits 3 to 6 as 0 in status register 1 (after reading)
+    fn disable_block_protection(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+        let reg = self.read_status_register_1(spi)?;
+        self.write_status_register_1(spi, reg & 0b10000111)
+    }
+
     /// Erase a block of flash memory
     fn erase_block(
         &self,

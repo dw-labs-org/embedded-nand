@@ -1,7 +1,5 @@
 #![no_std]
 
-use core::usize;
-
 pub mod address;
 pub mod async_trait;
 pub mod blocking;

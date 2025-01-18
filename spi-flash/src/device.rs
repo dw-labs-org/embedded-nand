@@ -298,6 +298,33 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: 
         self.device.erase_failed(&mut self.spi).await
     }
 
+    /// Load bytes to the device buffer/register, enable writing first.
+    /// This will reset the buffer/register to 0xFF
+    pub async fn program_load(
+        &mut self,
+        ca: ColumnAddress,
+        buf: &[u8],
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
+        self.write_enable().await?;
+        self.device.program_load(&mut self.spi, ca, buf).await
+    }
+
+    /// Write buffer to page, wait until completes, check for program failure
+    pub async fn program_execute(
+        &mut self,
+        page_address: PageAddress,
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
+        self.device
+            .program_execute(&mut self.spi, page_address)
+            .await?;
+        self.wait_ready().await?;
+        if self.program_failed().await? {
+            Err(crate::async_trait::SpiFlashErrorASync::ProgramFailed)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Read a whole page from the device
     /// This will read the page into the device buffer/register and then read it to the buffer
     pub async fn read_page(
@@ -307,6 +334,24 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: 
     ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.page_read(address).await?;
         self.page_read_buffer(ColumnAddress(0), buf).await
+    }
+
+    /// Write a whole page to the device
+    /// This will write the page to the buffer/register and then write it to the page
+    pub async fn write_page(
+        &mut self,
+        address: PageAddress,
+        buf: &[u8; N],
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
+        self.program_load(ColumnAddress(0), buf).await?;
+        self.program_execute(address).await
+    }
+
+    /// Disable block protection
+    pub async fn disable_block_protection(
+        &mut self,
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
+        self.device.disable_block_protection(&mut self.spi).await
     }
 }
 

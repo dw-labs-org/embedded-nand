@@ -162,6 +162,12 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         spi_write(spi, &[Self::STATUS_REGISTER_WRITE_COMMAND, 0xA0, data]).await
     }
 
+    /// Disable block protection
+    async fn disable_block_protection(&self, spi: &mut SPI) -> Result<(), SpiFlashErrorASync<SPI>> {
+        let reg = self.read_status_register_1(spi).await?;
+        self.write_status_register_1(spi, reg & 0b10000111).await
+    }
+
     /// Erase a block of flash memory
     async fn erase_block(
         &self,
