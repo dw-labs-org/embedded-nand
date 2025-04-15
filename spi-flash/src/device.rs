@@ -35,154 +35,65 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     pub fn reset_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
         self.device.reset_cmd(&mut self.spi)
     }
-    /// Read status register 1
-    pub fn read_status_register_1_blocking(&mut self) -> Result<u8, SpiFlashError<SPI>> {
-        self.device.read_status_register_1_cmd(&mut self.spi)
-    }
-
-    /// Read status register 2
-    pub fn read_status_register_2_blocking(&mut self) -> Result<u8, SpiFlashError<SPI>> {
-        self.device.read_status_register_2_cmd(&mut self.spi)
-    }
-
-    /// Read status register 3
-    pub fn read_status_register_3_blocking(&mut self) -> Result<u8, SpiFlashError<SPI>> {
-        self.device.read_status_register_3_cmd(&mut self.spi)
-    }
-
-    /// Check if the device is busy
-    pub fn is_busy_blocking(&mut self) -> Result<bool, SpiFlashError<SPI>> {
-        self.device.is_busy(&mut self.spi)
-    }
-
-    /// Wait until the device is ready
-    pub fn wait_ready_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        while self.is_busy_blocking()? {}
-        Ok(())
-    }
-
-    /// Read a page into the device buffer/register
-    /// Wait for the device to be ready
-    pub fn page_read_blocking(&mut self, address: PageAddress) -> Result<bool, SpiFlashError<SPI>> {
-        self.device.page_read_cmd(&mut self.spi, address)?;
-        self.wait_ready_blocking()?;
-        let ecc = self.device.check_ecc(&mut self.spi)?;
-        match ecc {
-            super::ECCStatus::Ok => Ok(true),
-            super::ECCStatus::Corrected => Ok(true),
-            super::ECCStatus::Failing => Ok(false),
-            super::ECCStatus::Failed => Err(SpiFlashError::ReadFailed),
-        }
-    }
-
-    /// Read bytes of a page from the device buffer/register starting from column address
-    pub fn page_read_buffer_blocking(
-        &mut self,
-        ca: ColumnAddress,
-        buf: &mut [u8],
-    ) -> Result<(), SpiFlashError<SPI>> {
-        self.device.page_read_buffer_cmd(&mut self.spi, ca, buf)
-    }
-
-    /// Enable writing to the flash device
-    pub fn write_enable_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.write_enable_cmd(&mut self.spi)
-    }
-
-    /// Disable writing to the flash device
-    pub fn write_disable_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.write_disable_cmd(&mut self.spi)
-    }
-
-    /// Erase a block of flash memory
-    /// Checks the busy flag until complete
-    /// Checks erase failed flag
+    /// Erase a block
     pub fn erase_block_blocking(
         &mut self,
         block_address: BlockAddress,
     ) -> Result<(), SpiFlashError<SPI>> {
-        self.device.erase_block_cmd(&mut self.spi, block_address)?;
-        self.wait_ready_blocking()?;
-        if self.erase_failed_blocking()? {
-            Err(SpiFlashError::EraseFailed)
-        } else {
-            Ok(())
-        }
+        self.device.erase_block(&mut self.spi, block_address)
     }
-
-    /// Check if writing to the device is enabled
-    pub fn is_write_enabled_blocking(&mut self) -> Result<bool, SpiFlashError<SPI>> {
-        self.device.is_write_enabled(&mut self.spi)
-    }
-
-    /// Check if programming failed
-    /// This is only valid after a write operation
-    pub fn program_failed_blocking(&mut self) -> Result<bool, SpiFlashError<SPI>> {
-        self.device.program_failed(&mut self.spi)
-    }
-
-    /// Check if erasing failed
-    /// This is only valid after an erase operation
-    pub fn erase_failed_blocking(&mut self) -> Result<bool, SpiFlashError<SPI>> {
-        self.device.erase_failed(&mut self.spi)
-    }
-
-    /// Write bytes to the device buffer/register, enable writing first.
-    /// This will reset the buffer/register to 0xFF
-    pub fn program_load_blocking(
-        &mut self,
-        ca: ColumnAddress,
-        buf: &[u8],
-    ) -> Result<(), SpiFlashError<SPI>> {
-        self.write_enable_blocking()?;
-        self.device.program_load_cmd(&mut self.spi, ca, buf)
-    }
-
-    /// Write buffer to page, wait until completes, check for program failure
-    pub fn program_execute_blocking(
+    /// Read a page
+    pub fn page_read_blocking(
         &mut self,
         page_address: PageAddress,
-    ) -> Result<(), SpiFlashError<SPI>> {
-        self.device
-            .program_execute_cmd(&mut self.spi, page_address)?;
-        self.wait_ready_blocking()?;
-        if self.program_failed_blocking()? {
-            Err(SpiFlashError::ProgramFailed)
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Read a whole page from the device
-    /// This will read the page into the device buffer/register and then read it to the buffer
-    pub fn read_page_blocking(
-        &mut self,
-        address: PageAddress,
         buf: &mut [u8; N],
     ) -> Result<(), SpiFlashError<SPI>> {
-        self.page_read_blocking(address)?;
-        self.page_read_buffer_blocking(ColumnAddress(0), buf)
+        // Read page
+        self.device.read_page(&mut self.spi, page_address, buf)
+        // Check ECC if enabled
     }
 
-    /// Write a whole page to the device
-    /// This will write the page to the buffer/register and then write it to the page
+    /// Read a slice of a page
+    pub fn read_page_slice_blocking(
+        &mut self,
+        page_address: PageAddress,
+        column_address: ColumnAddress,
+        buf: &mut [u8],
+    ) -> Result<(), SpiFlashError<SPI>> {
+        // Read page
+        self.device
+            .read_page_slice(&mut self.spi, page_address, column_address, buf)
+        // Check ECC if enabled
+    }
+
+    /// Write a page
     pub fn write_page_blocking(
         &mut self,
-        address: PageAddress,
+        page_address: PageAddress,
         buf: &[u8; N],
     ) -> Result<(), SpiFlashError<SPI>> {
-        self.program_load_blocking(ColumnAddress(0), buf)?;
-        self.program_execute_blocking(address)
+        // Write page
+        self.device.write_page(&mut self.spi, page_address, buf)
     }
 
-    /// Enter deep power down mode
-    pub fn deep_power_down_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.deep_power_down_cmd(&mut self.spi)
+    /// Write a slice of a page
+    pub fn write_page_slice_blocking(
+        &mut self,
+        page_address: PageAddress,
+        column_address: ColumnAddress,
+        buf: &[u8],
+    ) -> Result<(), SpiFlashError<SPI>> {
+        // Write page
+        self.device
+            .write_page_slice(&mut self.spi, page_address, column_address, buf)
     }
 
-    /// Exit deep power down mode
-    pub fn deep_power_down_exit_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.deep_power_down_exit_cmd(&mut self.spi)
+    /// Mark a block as bad
+    pub fn mark_block_bad_blocking(
+        &mut self,
+        block_address: BlockAddress,
+    ) -> Result<(), SpiFlashError<SPI>> {
+        self.device.mark_block_bad(&mut self.spi, block_address)
     }
 }
 
@@ -397,24 +308,24 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> ReadNandFlash
         let ba = ByteAddress(offset);
         let ca = ba.as_column_address(D::PAGE_SIZE);
         let mut pa = ba.as_page_address(D::PAGE_SIZE);
-        if ca.0 != 0 {
-            // Not aligned to page
-            // Read rest of page (or requested bytes)
-            self.page_read_blocking(pa)?;
-            // check if single read is enough
-            let end = D::PAGE_SIZE as usize - ca.0 as usize;
-            if end >= bytes.len() {
-                return self.page_read_buffer_blocking(ca, bytes);
-            }
-            self.page_read_buffer_blocking(ca, &mut bytes[0..end])?;
-            bytes = &mut bytes[end..];
-        }
+        // if ca.0 != 0 {
+        //     // Not aligned to page
+        //     // Read rest of page (or requested bytes)
+        //     self.page_read_blocking(pa)?;
+        //     // check if single read is enough
+        //     let end = D::PAGE_SIZE as usize - ca.0 as usize;
+        //     if end >= bytes.len() {
+        //         return self.page_read_buffer_blocking(ca, bytes);
+        //     }
+        //     self.page_read_buffer_blocking(ca, &mut bytes[0..end])?;
+        //     bytes = &mut bytes[end..];
+        // }
 
-        for chunk in bytes.chunks_mut(D::PAGE_SIZE as usize) {
-            self.page_read_blocking(pa)?;
-            self.page_read_buffer_blocking(0.into(), chunk)?;
-            pa.0 += 1;
-        }
+        // for chunk in bytes.chunks_mut(D::PAGE_SIZE as usize) {
+        //     self.page_read_blocking(pa)?;
+        //     self.page_read_buffer_blocking(0.into(), chunk)?;
+        //     pa.0 += 1;
+        // }
         Ok(())
     }
 
@@ -454,8 +365,8 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
     fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
         for chunk in bytes.chunks(D::PAGE_SIZE as usize) {
             let pa = ByteAddress(offset).as_page_address(D::PAGE_SIZE);
-            self.program_load_blocking(0.into(), chunk)?;
-            self.program_execute_blocking(pa)?;
+            // self.program_load_blocking(0.into(), chunk)?;
+            // self.program_execute_blocking(pa)?;
         }
         Ok(())
     }

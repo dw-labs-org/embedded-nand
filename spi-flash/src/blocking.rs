@@ -263,15 +263,15 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         spi: &mut SPI,
         block_address: BlockAddress,
     ) -> Result<bool, SpiFlashError<SPI>> {
-        // Read page into the buffer
-        self.page_read_cmd(
+        // Read the first 2 bytes of the extra data
+        let mut buf = [0; 2];
+        self.read_page_slice(
             spi,
             PageAddress::from_block_address(block_address, Self::PAGES_PER_BLOCK),
+            ColumnAddress(Self::PAGE_SIZE as u16),
+            &mut buf,
         )?;
-        // Read the first byte of the extra data
-        let mut buf = [0; 2];
-        self.page_read_buffer_cmd(spi, ColumnAddress(Self::PAGE_SIZE as u16), &mut buf)?;
-        Ok(buf[0] != 0xFF && buf[1] != 0xFF)
+        Ok(buf[0] != 0xFF || buf[1] != 0xFF)
     }
 
     /// Mark a block as bad
@@ -282,25 +282,110 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         &self,
         spi: &mut SPI,
         block_address: BlockAddress,
-    ) -> Result<bool, SpiFlashError<SPI>> {
+    ) -> Result<(), SpiFlashError<SPI>> {
         let pa = PageAddress::from_block_address(block_address, Self::PAGES_PER_BLOCK);
         // Erase the block
-        self.erase_block_cmd(spi, block_address)?;
-        while self.is_busy(spi)? {
-            // Wait for the erase to complete
-        }
-        if self.erase_failed(spi)? {
-            return Ok(false);
-        }
-        // Write 0x00 to the 2nd byte of the extra data
+        self.erase_block(spi, block_address)?;
+        // Write to the 2nd byte in the extra data
+        self.write_page_slice(spi, pa, (Self::PAGE_SIZE as u16 + 1).into(), &[0])
+    }
+
+    // ============= RWE functions =============
+    /// Erase a block
+    fn erase_block(
+        &self,
+        spi: &mut SPI,
+        block_address: BlockAddress,
+    ) -> Result<(), SpiFlashError<SPI>> {
+        // Enable writing
         self.write_enable_cmd(spi)?;
-        self.program_load_cmd(spi, (Self::PAGE_SIZE as u16 + 1).into(), &[0])?;
-        self.program_execute_cmd(spi, pa)?;
-        while self.is_busy(spi)? {
-            // Wait for the write to complete
+        // Erase the block
+        self.erase_block_cmd(spi, block_address)?;
+        // Wait for the erase to complete
+        while self.is_busy(spi)? {}
+        // Check if the erase failed
+        if self.erase_failed(spi)? {
+            return Err(SpiFlashError::EraseFailed);
         }
+        Ok(())
+    }
+
+    /// Read a page from the device
+    fn read_page(
+        &self,
+        spi: &mut SPI,
+        page_address: PageAddress,
+        buf: &mut [u8; N],
+    ) -> Result<(), SpiFlashError<SPI>> {
+        // Read page into device buffer
+        self.page_read_cmd(spi, page_address)?;
+        // Read the page from the device buffer
+        self.page_read_buffer_cmd(spi, ColumnAddress(0), buf)
+    }
+
+    /// Read a slice from a page
+    fn read_page_slice(
+        &self,
+        spi: &mut SPI,
+        page_address: PageAddress,
+        column_address: ColumnAddress,
+        buf: &mut [u8],
+    ) -> Result<(), SpiFlashError<SPI>> {
+        // Read page into device buffer
+        self.page_read_cmd(spi, page_address)?;
+        // Wait for the read to complete
+        while self.is_busy(spi)? {}
+        // Read the page from the device buffer
+        self.page_read_buffer_cmd(spi, column_address, buf)
+    }
+
+    /// Write a page to the device.
+    ///
+    /// Must use [SpiNandBlocking::block_erase] first
+    fn write_page(
+        &self,
+        spi: &mut SPI,
+        page_address: PageAddress,
+        buf: &[u8; N],
+    ) -> Result<(), SpiFlashError<SPI>> {
+        // Enable writing
+        self.write_enable_cmd(spi)?;
+        // Write to the device buffer
+        self.program_load_cmd(spi, 0.into(), buf)?;
+        // Write the buffer to the page
+        self.program_execute_cmd(spi, page_address)?;
+        // Wait for the write to complete
+        while self.is_busy(spi)? {}
         // Check if the write failed
-        self.program_failed(spi).map(|b| !b)
+        if self.program_failed(spi)? {
+            return Err(SpiFlashError::ProgramFailed);
+        }
+        Ok(())
+    }
+
+    /// Write a slice to a page
+    ///
+    /// Must use [SpiNandBlocking::block_erase] first
+    fn write_page_slice(
+        &self,
+        spi: &mut SPI,
+        page_address: PageAddress,
+        column_address: ColumnAddress,
+        buf: &[u8],
+    ) -> Result<(), SpiFlashError<SPI>> {
+        // Enable writing
+        self.write_enable_cmd(spi)?;
+        // Write to the device buffer
+        self.program_load_cmd(spi, column_address, buf)?;
+        // Write the buffer to the page
+        self.program_execute_cmd(spi, page_address)?;
+        // Wait for the write to complete
+        while self.is_busy(spi)? {}
+        // Check if the write failed
+        if self.program_failed(spi)? {
+            return Err(SpiFlashError::ProgramFailed);
+        }
+        Ok(())
     }
 }
 

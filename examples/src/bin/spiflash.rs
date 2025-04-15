@@ -87,17 +87,21 @@ async fn main(spawner: Spawner) {
     dbg!(flash.disable_block_protection().await);
     let ba = BlockAddress::from(0);
     let pa = PageAddress::from_block_address(ba, 64);
+    dbg!(flash.erase_block_blocking(1.into()));
 
     embassy_time::Timer::after_secs(1).await;
     // // Mark a block as bad
-    dbg!(flash.device.mark_block_bad(&mut flash.spi, ba));
+    // dbg!(flash.device.mark_block_bad(&mut flash.spi, ba));
 
-    // let mut rbuf = [0; 5];
+    let mut rbuf = [0; 5];
+    dbg!(flash.read_page_slice_blocking((0 * 64).into(), 2047.into(), &mut rbuf));
+    dbg!(rbuf);
     // flash.page_read(pa).await;
     // flash.page_read_buffer(2047.into(), &mut rbuf).await;
     // dbg!(rbuf);
     embassy_time::Timer::after_secs(1).await;
     defmt::info!("Checking bad blocks");
+    // flash.mark_block_bad_blocking(1.into());
 
     for i in 0..2048 {
         if flash
