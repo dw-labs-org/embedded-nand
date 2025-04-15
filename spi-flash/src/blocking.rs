@@ -250,6 +250,17 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         ];
         spi_write(spi, &data)
     }
+
+    /// Put the device in deep power down mode
+    /// Requires callling [SpiNandBlocking::deep_power_down_exit] to exit
+    fn deep_power_down(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+        spi_write(spi, &[Self::DEEP_POWER_DOWN_COMMAND])
+    }
+
+    /// Exit deep power down mode
+    fn deep_power_down_exit(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+        spi_write(spi, &[Self::DEEP_POWER_DOWN_EXIT_COMMAND])
+    }
 }
 
 pub mod utils {

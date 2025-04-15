@@ -173,6 +173,16 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         self.program_load_blocking(ColumnAddress(0), buf)?;
         self.program_execute_blocking(address)
     }
+
+    /// Enter deep power down mode
+    pub fn deep_power_down_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
+        self.device.deep_power_down(&mut self.spi)
+    }
+
+    /// Exit deep power down mode
+    pub fn deep_power_down_exit_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
+        self.device.deep_power_down_exit(&mut self.spi)
+    }
 }
 
 impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: usize>
@@ -352,6 +362,19 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: 
         &mut self,
     ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.disable_block_protection(&mut self.spi).await
+    }
+
+    /// Enter deep power down
+    pub async fn deep_power_down(
+        &mut self,
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
+        self.device.deep_power_down(&mut self.spi).await
+    }
+    /// Exit deep power down
+    pub async fn deep_power_down_exit(
+        &mut self,
+    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
+        self.device.deep_power_down_exit(&mut self.spi).await
     }
 }
 

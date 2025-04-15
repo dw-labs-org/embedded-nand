@@ -55,6 +55,10 @@ pub trait SpiNand<const N: usize> {
     const PROGRAM_RANDOM_LOAD_COMMAND: u8 = 0x84;
     /// Command to program the device buffer/register to a page
     const PROGRAM_EXECUTE_COMMAND: u8 = 0x10;
+    /// Command to enter deep power down
+    const DEEP_POWER_DOWN_COMMAND: u8 = 0xB9;
+    /// Command to exit deep power down
+    const DEEP_POWER_DOWN_EXIT_COMMAND: u8 = 0xAB;
 }
 
 pub enum ECCStatus {

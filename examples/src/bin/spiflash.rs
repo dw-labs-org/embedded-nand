@@ -93,10 +93,12 @@ async fn main(spawner: Spawner) {
     }
     defmt::info!("Checked bad blocks");
 
-    wfi();
-
-    loop {
-        dbg!(flash.read_page(0.into(), &mut buf).await);
-        embassy_time::Timer::after_secs(1).await;
-    }
+    // loop {
+    //     // dbg!(flash.read_page(0.into(), &mut buf).await);
+    //     embassy_time::Timer::after_secs(1).await;
+    //     flash.deep_power_down_blocking();
+    //     embassy_time::Timer::after_secs(1).await;
+    //     flash.deep_power_down_exit_blocking();
+    // }
+    drop(flash);
 }

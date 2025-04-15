@@ -251,6 +251,16 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         ];
         spi_write(spi, &data).await
     }
+
+    /// Enter deep power down.
+    /// Call [SpiNandAsync::deep_power_down_exit] to exit
+    async fn deep_power_down(&self, spi: &mut SPI) -> Result<(), SpiFlashErrorASync<SPI>> {
+        spi_write(spi, &[Self::DEEP_POWER_DOWN_COMMAND]).await
+    }
+    /// Exit deep power down
+    async fn deep_power_down_exit(&self, spi: &mut SPI) -> Result<(), SpiFlashErrorASync<SPI>> {
+        spi_write(spi, &[Self::DEEP_POWER_DOWN_EXIT_COMMAND]).await
+    }
 }
 
 pub mod utils {
