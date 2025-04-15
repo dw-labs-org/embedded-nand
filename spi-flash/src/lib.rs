@@ -5,6 +5,16 @@ pub mod async_trait;
 pub mod blocking;
 pub mod device;
 
+/// Core trait that a NAND flash device must implement.
+///
+/// Enables use of the [crate::blocking::SpiNandBlocking] and
+/// [crate::async_trait::SpiNandAsync] traits.
+///
+/// At minimum requires [SpiNand::PAGE_SIZE] generic, [SpiNand::PAGES_PER_BLOCK] and
+/// [SpiNand::BLOCK_COUNT] constants to define the size and layout of the device.
+///
+/// Default command implementations in [crate::blocking::SpiNandBlocking] and
+/// [crate::async_trait::SpiNandAsync] can be overriden by changing the COMMAND constants.
 pub trait SpiNand<const N: usize> {
     // Device layout
     /// The size of a page in bytes

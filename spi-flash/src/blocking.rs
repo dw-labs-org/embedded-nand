@@ -20,6 +20,16 @@ pub enum SpiFlashError<SPI: SpiDevice> {
     ReadFailed,
 }
 
+/// Blocking SPI NAND flash trait
+/// Contains the low level, mostly single SPI operation commands
+///
+/// The default implementations are fairly generic and should work for most SPI NAND flash devices.
+/// Look to make changes to the [SpiNand] trait first to change the default behavior.
+/// If this isn't possible, override the default function(s).
+///
+///
+///
+/// For async implementations, see [crate::async_trait::SpiNandAsync].
 pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     /// Issue a reset command to the flash device
     fn reset(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
@@ -182,11 +192,11 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     ///
     /// This will reset the buffer/register to 0xFF
     ///
-    /// Use [SpiNandWrite::write_enable] to enable writing before this command
+    /// Use [SpiNandBlocking::write_enable] to enable writing before this command
     ///
-    /// Use [SpiNandWrite::program_random_load] to write without resetting
+    /// Use [SpiNandBlocking::program_random_load] to write without resetting
     ///
-    /// Use [SpiNandWrite::program_execute] to write the buffer/register to a page
+    /// Use [SpiNandBlocking::program_execute] to write the buffer/register to a page
     ///
     fn program_load(
         &self,
@@ -200,11 +210,11 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
 
     /// Write bytes to the device buffer/register without resetting
     ///
-    /// Use [SpiNandWrite::write_enable] to enable writing before this command
+    /// Use [SpiNandBlocking::write_enable] to enable writing before this command
     ///
-    /// Use [SpiNandWrite::program_execute] to write the buffer/register to a page
+    /// Use [SpiNandBlocking::program_execute] to write the buffer/register to a page
     ///
-    /// Use [SpiNandWrite::program_load] to write with resetting
+    /// Use [SpiNandBlocking::program_load] to write with resetting
     fn program_random_load(
         &self,
         spi: &mut SPI,
@@ -221,11 +231,11 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
 
     /// Write the device buffer/register to a page
     ///
-    /// Use [SpiNandWrite::program_load] or [SpiNandWrite::program_random_load] to write to the buffer/register    
+    /// Use [SpiNandBlocking::program_load] or [SpiNandWrite::program_random_load] to write to the buffer/register    
     ///
-    /// Use [SpiNandRead::is_busy] to check when the write is complete
+    /// Use [SpiNandBlocking::is_busy] to check when the write is complete
     ///
-    /// Check [SpiNandWrite::program_failed] to see if the write failed
+    /// Check [SpiNandBlocking::program_failed] to see if the write failed
     fn program_execute(
         &self,
         spi: &mut SPI,

@@ -1,0 +1,20 @@
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+runner = [
+    "probe-rs",
+    "run",
+    "--chip",
+    "STM32U575VG",
+    "--connect-under-reset",
+    "--log-format",
+    "{t} {L} {s}",
+]
+
+# replace your chip as listed in `probe-rs chip list`
+
+[build]
+target = "thumbv8m.main-none-eabi"
+target-dir = "target"
+
+[env]
+DEFMT_LOG = "trace"
+EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "16384"
