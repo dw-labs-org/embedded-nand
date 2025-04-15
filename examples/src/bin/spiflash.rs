@@ -2,10 +2,13 @@
 #![no_std]
 
 use cortex_m::asm::wfi;
+use cortex_m::register::apsr::read;
 use cortex_m_semihosting::debug;
 use defmt::dbg;
 use embassy_executor::Spawner;
+use embassy_stm32::lptim::timer::Timer;
 use embassy_stm32::{can::BufferedCan, gpio::Output};
+use spi_flash::address::{BlockAddress, PageAddress};
 use spi_flash::blocking::SpiNandBlocking;
 use spi_flash::{
     SpiNand,
@@ -44,6 +47,7 @@ unsafe fn HardFault(_frame: &cortex_m_rt::ExceptionFrame) -> ! {
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mut config = embassy_stm32::Config::default();
+
     let p = embassy_stm32::init(config);
 
     defmt::info!("Initialised peripherals");
@@ -79,9 +83,22 @@ async fn main(spawner: Spawner) {
 
     // Read the JEDEC ID
     dbg!(flash.reset_blocking());
-    let mut buf = [0; 2048];
+    dbg!(flash.jedec_blocking());
+    dbg!(flash.disable_block_protection().await);
+    let ba = BlockAddress::from(0);
+    let pa = PageAddress::from_block_address(ba, 64);
 
+    embassy_time::Timer::after_secs(1).await;
+    // // Mark a block as bad
+    dbg!(flash.device.mark_block_bad(&mut flash.spi, ba));
+
+    // let mut rbuf = [0; 5];
+    // flash.page_read(pa).await;
+    // flash.page_read_buffer(2047.into(), &mut rbuf).await;
+    // dbg!(rbuf);
+    embassy_time::Timer::after_secs(1).await;
     defmt::info!("Checking bad blocks");
+
     for i in 0..2048 {
         if flash
             .device
@@ -92,13 +109,4 @@ async fn main(spawner: Spawner) {
         }
     }
     defmt::info!("Checked bad blocks");
-
-    // loop {
-    //     // dbg!(flash.read_page(0.into(), &mut buf).await);
-    //     embassy_time::Timer::after_secs(1).await;
-    //     flash.deep_power_down_blocking();
-    //     embassy_time::Timer::after_secs(1).await;
-    //     flash.deep_power_down_exit_blocking();
-    // }
-    drop(flash);
 }

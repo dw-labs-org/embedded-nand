@@ -2,7 +2,10 @@ use address::{ColumnAddress, PageAddress};
 use embedded_hal::spi::{Operation, SpiDevice};
 use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
 
-use crate::{address, ECCStatus, JedecID, SpiNand};
+use crate::{
+    address::{self, BlockAddress},
+    ECCStatus, JedecID, SpiNand,
+};
 
 // #[cfg(target_feature = "defmt")]
 #[derive(defmt::Format)]
@@ -31,49 +34,45 @@ pub enum SpiFlashError<SPI: SpiDevice> {
 ///
 /// For async implementations, see [crate::async_trait::SpiNandAsync].
 pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
+    // ============= Commands =============
+
     /// Issue a reset command to the flash device
-    fn reset(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+    fn reset_cmd(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::RESET_COMMAND])
     }
 
     /// Read the JEDEC ID of the flash device
     /// By default reads the first byte
     // TODO: #1 Read the full JEDEC ID
-    fn read_jedec_id(&self, spi: &mut SPI) -> Result<JedecID, SpiFlashError<SPI>> {
+    fn read_jedec_id_cmd(&self, spi: &mut SPI) -> Result<JedecID, SpiFlashError<SPI>> {
         let mut buf = [0; 2];
         spi_transfer(spi, &mut buf, &[Self::JEDEC_COMMAND, 0])?;
         Ok(JedecID::new(buf[1], 1))
     }
 
     /// Read  status register 1
-    fn read_status_register_1(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI>> {
+    fn read_status_register_1_cmd(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI>> {
         let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, 0xA0, 0];
         spi_transfer_in_place(spi, &mut buf)?;
         Ok(buf[2])
     }
 
     /// Read status register 2
-    fn read_status_register_2(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI>> {
+    fn read_status_register_2_cmd(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI>> {
         let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, 0xB0, 0];
         spi_transfer_in_place(spi, &mut buf)?;
         Ok(buf[2])
     }
 
     /// Read status register 3
-    fn read_status_register_3(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI>> {
+    fn read_status_register_3_cmd(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI>> {
         let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, 0xC0, 0];
         spi_transfer_in_place(spi, &mut buf)?;
         Ok(buf[2])
     }
 
-    /// Check if busy flag is set
-    fn is_busy(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
-        let status = self.read_status_register_3(spi)?;
-        Ok((status & 0x01) != 0)
-    }
-
     /// Read a page into the device buffer/register
-    fn page_read(&self, spi: &mut SPI, address: PageAddress) -> Result<(), SpiFlashError<SPI>> {
+    fn page_read_cmd(&self, spi: &mut SPI, address: PageAddress) -> Result<(), SpiFlashError<SPI>> {
         let pa = address.0;
         let buf = [
             Self::PAGE_READ_COMMAND,
@@ -85,7 +84,7 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     }
 
     /// Read bytes of a page from the device buffer/register starting from column address
-    fn page_read_buffer(
+    fn page_read_buffer_cmd(
         &self,
         spi: &mut SPI,
         ca: ColumnAddress,
@@ -105,78 +104,33 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         )
     }
 
-    /// Check the ECC flags after a page read
-    fn check_ecc(&self, spi: &mut SPI) -> Result<ECCStatus, SpiFlashError<SPI>> {
-        let status = self.read_status_register_3(spi)? & 0x30;
-        match status {
-            0x00 => Ok(ECCStatus::Ok),
-            0x10 => Ok(ECCStatus::Corrected),
-            0x20 => Ok(ECCStatus::Failed),
-            _ => Ok(ECCStatus::Failing),
-        }
-    }
-
-    /// Check if the block is marked as bad
-    fn block_marked_bad(
-        &self,
-        spi: &mut SPI,
-        address: PageAddress,
-    ) -> Result<bool, SpiFlashError<SPI>> {
-        // Read page into the buffer
-        self.page_read(spi, address)?;
-        // Read the first byte of the extra data
-        let mut buf = [0; 1];
-        self.page_read_buffer(spi, ColumnAddress(Self::PAGE_SIZE as u16), &mut buf)?;
-        Ok(buf[0] != 0xFF)
-    }
-
     /// Enable writing to the flash device
-    fn write_enable(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+    fn write_enable_cmd(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::WRITE_ENABLE_COMMAND])
     }
 
     /// Disable writing to the flash device
-    fn write_disable(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+    fn write_disable_cmd(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::WRITE_DISABLE_COMMAND])
-    }
-
-    /// Check if write protection is enabled
-    fn is_write_enabled(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
-        Ok((self.read_status_register_3(spi)? & 0x02) != 0)
-    }
-
-    /// Check if programming/writing failed
-    fn program_failed(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
-        Ok((self.read_status_register_3(spi)? & 0x08) != 0)
-    }
-
-    /// Check if erase failed
-    fn erase_failed(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
-        Ok((self.read_status_register_3(spi)? & 0x04) != 0)
     }
 
     /// Write to status register 1
     /// This is used to set the block protection bits and status protection bits
-    fn write_status_register_1(&self, spi: &mut SPI, data: u8) -> Result<(), SpiFlashError<SPI>> {
+    fn write_status_register_1_cmd(
+        &self,
+        spi: &mut SPI,
+        data: u8,
+    ) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::STATUS_REGISTER_WRITE_COMMAND, 0xA0, data])
     }
 
-    /// Disable block protection
-    /// Writes bits 3 to 6 as 0 in status register 1 (after reading)
-    fn disable_block_protection(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
-        let reg = self.read_status_register_1(spi)?;
-        self.write_status_register_1(spi, reg & 0b10000111)
-    }
-
     /// Erase a block of flash memory
-    fn erase_block(
+    fn erase_block_cmd(
         &self,
         spi: &mut SPI,
-        page_address: PageAddress,
+        block_address: BlockAddress,
     ) -> Result<(), SpiFlashError<SPI>> {
-        let address = page_address.0;
-        // Enable writing first
-        self.write_enable(spi)?;
+        let address = PageAddress::from_block_address(block_address, Self::PAGES_PER_BLOCK).0;
         spi_write(
             spi,
             &[
@@ -198,7 +152,7 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     ///
     /// Use [SpiNandBlocking::program_execute] to write the buffer/register to a page
     ///
-    fn program_load(
+    fn program_load_cmd(
         &self,
         spi: &mut SPI,
         ca: ColumnAddress,
@@ -215,7 +169,7 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     /// Use [SpiNandBlocking::program_execute] to write the buffer/register to a page
     ///
     /// Use [SpiNandBlocking::program_load] to write with resetting
-    fn program_random_load(
+    fn program_random_load_cmd(
         &self,
         spi: &mut SPI,
         ca: ColumnAddress,
@@ -236,7 +190,7 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     /// Use [SpiNandBlocking::is_busy] to check when the write is complete
     ///
     /// Check [SpiNandBlocking::program_failed] to see if the write failed
-    fn program_execute(
+    fn program_execute_cmd(
         &self,
         spi: &mut SPI,
         address: PageAddress,
@@ -253,13 +207,100 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
 
     /// Put the device in deep power down mode
     /// Requires callling [SpiNandBlocking::deep_power_down_exit] to exit
-    fn deep_power_down(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+    fn deep_power_down_cmd(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::DEEP_POWER_DOWN_COMMAND])
     }
 
     /// Exit deep power down mode
-    fn deep_power_down_exit(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+    fn deep_power_down_exit_cmd(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
         spi_write(spi, &[Self::DEEP_POWER_DOWN_EXIT_COMMAND])
+    }
+
+    // ============= Status functions ============
+    /// Check the ECC flags after a page read
+    fn check_ecc(&self, spi: &mut SPI) -> Result<ECCStatus, SpiFlashError<SPI>> {
+        let status = self.read_status_register_3_cmd(spi)? & 0x30;
+        match status {
+            0x00 => Ok(ECCStatus::Ok),
+            0x10 => Ok(ECCStatus::Corrected),
+            0x20 => Ok(ECCStatus::Failed),
+            _ => Ok(ECCStatus::Failing),
+        }
+    }
+
+    /// Check if write protection is enabled
+    fn is_write_enabled(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
+        Ok((self.read_status_register_3_cmd(spi)? & 0x02) != 0)
+    }
+
+    /// Check if programming/writing failed
+    fn program_failed(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
+        Ok((self.read_status_register_3_cmd(spi)? & 0x08) != 0)
+    }
+
+    /// Check if erase failed
+    fn erase_failed(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
+        Ok((self.read_status_register_3_cmd(spi)? & 0x04) != 0)
+    }
+
+    /// Check if busy flag is set
+    fn is_busy(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI>> {
+        let status = self.read_status_register_3_cmd(spi)?;
+        Ok((status & 0x01) != 0)
+    }
+
+    /// Disable block protection
+    /// Writes bits 3 to 6 as 0 in status register 1 (after reading)
+    fn disable_block_protection(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI>> {
+        let reg = self.read_status_register_1_cmd(spi)?;
+        self.write_status_register_1_cmd(spi, reg & 0b10000111)
+    }
+
+    // ============ Bad Block functions ============
+    /// Check if the block is marked as bad
+    fn block_marked_bad(
+        &self,
+        spi: &mut SPI,
+        block_address: BlockAddress,
+    ) -> Result<bool, SpiFlashError<SPI>> {
+        // Read page into the buffer
+        self.page_read_cmd(
+            spi,
+            PageAddress::from_block_address(block_address, Self::PAGES_PER_BLOCK),
+        )?;
+        // Read the first byte of the extra data
+        let mut buf = [0; 2];
+        self.page_read_buffer_cmd(spi, ColumnAddress(Self::PAGE_SIZE as u16), &mut buf)?;
+        Ok(buf[0] != 0xFF && buf[1] != 0xFF)
+    }
+
+    /// Mark a block as bad
+    /// This will write 0x00 to the 2nd byte of the extra data.
+    ///
+    /// Returns true if sucessful
+    fn mark_block_bad(
+        &self,
+        spi: &mut SPI,
+        block_address: BlockAddress,
+    ) -> Result<bool, SpiFlashError<SPI>> {
+        let pa = PageAddress::from_block_address(block_address, Self::PAGES_PER_BLOCK);
+        // Erase the block
+        self.erase_block_cmd(spi, block_address)?;
+        while self.is_busy(spi)? {
+            // Wait for the erase to complete
+        }
+        if self.erase_failed(spi)? {
+            return Ok(false);
+        }
+        // Write 0x00 to the 2nd byte of the extra data
+        self.write_enable_cmd(spi)?;
+        self.program_load_cmd(spi, (Self::PAGE_SIZE as u16 + 1).into(), &[0])?;
+        self.program_execute_cmd(spi, pa)?;
+        while self.is_busy(spi)? {
+            // Wait for the write to complete
+        }
+        // Check if the write failed
+        self.program_failed(spi).map(|b| !b)
     }
 }
 

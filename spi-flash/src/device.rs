@@ -6,7 +6,7 @@ use embedded_nand::{
 };
 
 use crate::{
-    address::{ByteAddress, PageAddress},
+    address::{BlockAddress, ByteAddress, PageAddress},
     async_trait::SpiNandAsync,
     blocking::{SpiFlashError, SpiNandBlocking},
 };
@@ -29,25 +29,25 @@ impl<SPI, D, const N: usize> SpiFlash<SPI, D, N> {
 impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D, N> {
     /// Get the Jedec ID of the flash device
     pub fn jedec_blocking(&mut self) -> Result<JedecID, SpiFlashError<SPI>> {
-        self.device.read_jedec_id(&mut self.spi)
+        self.device.read_jedec_id_cmd(&mut self.spi)
     }
     /// Reset the flash device
     pub fn reset_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.reset(&mut self.spi)
+        self.device.reset_cmd(&mut self.spi)
     }
     /// Read status register 1
     pub fn read_status_register_1_blocking(&mut self) -> Result<u8, SpiFlashError<SPI>> {
-        self.device.read_status_register_1(&mut self.spi)
+        self.device.read_status_register_1_cmd(&mut self.spi)
     }
 
     /// Read status register 2
     pub fn read_status_register_2_blocking(&mut self) -> Result<u8, SpiFlashError<SPI>> {
-        self.device.read_status_register_2(&mut self.spi)
+        self.device.read_status_register_2_cmd(&mut self.spi)
     }
 
     /// Read status register 3
     pub fn read_status_register_3_blocking(&mut self) -> Result<u8, SpiFlashError<SPI>> {
-        self.device.read_status_register_3(&mut self.spi)
+        self.device.read_status_register_3_cmd(&mut self.spi)
     }
 
     /// Check if the device is busy
@@ -64,7 +64,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     /// Read a page into the device buffer/register
     /// Wait for the device to be ready
     pub fn page_read_blocking(&mut self, address: PageAddress) -> Result<bool, SpiFlashError<SPI>> {
-        self.device.page_read(&mut self.spi, address)?;
+        self.device.page_read_cmd(&mut self.spi, address)?;
         self.wait_ready_blocking()?;
         let ecc = self.device.check_ecc(&mut self.spi)?;
         match ecc {
@@ -81,17 +81,17 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         ca: ColumnAddress,
         buf: &mut [u8],
     ) -> Result<(), SpiFlashError<SPI>> {
-        self.device.page_read_buffer(&mut self.spi, ca, buf)
+        self.device.page_read_buffer_cmd(&mut self.spi, ca, buf)
     }
 
     /// Enable writing to the flash device
     pub fn write_enable_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.write_enable(&mut self.spi)
+        self.device.write_enable_cmd(&mut self.spi)
     }
 
     /// Disable writing to the flash device
     pub fn write_disable_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.write_disable(&mut self.spi)
+        self.device.write_disable_cmd(&mut self.spi)
     }
 
     /// Erase a block of flash memory
@@ -99,9 +99,9 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     /// Checks erase failed flag
     pub fn erase_block_blocking(
         &mut self,
-        page_address: PageAddress,
+        block_address: BlockAddress,
     ) -> Result<(), SpiFlashError<SPI>> {
-        self.device.erase_block(&mut self.spi, page_address)?;
+        self.device.erase_block_cmd(&mut self.spi, block_address)?;
         self.wait_ready_blocking()?;
         if self.erase_failed_blocking()? {
             Err(SpiFlashError::EraseFailed)
@@ -135,7 +135,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         buf: &[u8],
     ) -> Result<(), SpiFlashError<SPI>> {
         self.write_enable_blocking()?;
-        self.device.program_load(&mut self.spi, ca, buf)
+        self.device.program_load_cmd(&mut self.spi, ca, buf)
     }
 
     /// Write buffer to page, wait until completes, check for program failure
@@ -143,7 +143,8 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         &mut self,
         page_address: PageAddress,
     ) -> Result<(), SpiFlashError<SPI>> {
-        self.device.program_execute(&mut self.spi, page_address)?;
+        self.device
+            .program_execute_cmd(&mut self.spi, page_address)?;
         self.wait_ready_blocking()?;
         if self.program_failed_blocking()? {
             Err(SpiFlashError::ProgramFailed)
@@ -176,12 +177,12 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
 
     /// Enter deep power down mode
     pub fn deep_power_down_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.deep_power_down(&mut self.spi)
+        self.device.deep_power_down_cmd(&mut self.spi)
     }
 
     /// Exit deep power down mode
     pub fn deep_power_down_exit_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
-        self.device.deep_power_down_exit(&mut self.spi)
+        self.device.deep_power_down_exit_cmd(&mut self.spi)
     }
 }
 
@@ -439,7 +440,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
 
     fn erase(&mut self, mut offset: u32, length: u32) -> Result<(), Self::Error> {
         loop {
-            let pa = ByteAddress(offset).as_page_address(D::PAGE_SIZE);
+            let pa = ByteAddress(offset).as_block_address(D::BLOCK_SIZE);
             self.erase_block_blocking(pa)?;
 
             offset += D::BLOCK_SIZE;

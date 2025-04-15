@@ -6,6 +6,11 @@ impl PageAddress {
     pub fn from_byte_address(ba: ByteAddress, page_size: u32) -> Self {
         PageAddress(ba.0 / page_size)
     }
+
+    /// Convert from a [BlockAddress]
+    pub fn from_block_address(ba: BlockAddress, pages_per_block: u32) -> Self {
+        PageAddress(ba.0 * pages_per_block)
+    }
 }
 
 /// Address of a block in the flash device
@@ -23,6 +28,10 @@ impl ByteAddress {
 
     pub fn as_column_address(&self, page_size: u32) -> ColumnAddress {
         ColumnAddress((self.0 % page_size) as u16)
+    }
+
+    pub fn as_block_address(&self, block_size: u32) -> BlockAddress {
+        BlockAddress(self.0 / (block_size))
     }
 }
 
