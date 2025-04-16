@@ -529,9 +529,21 @@ dependencies = [
  "embassy-sync",
  "embassy-time",
  "embedded-hal-bus",
+ "flashmap",
  "panic-probe",
  "spi-flash",
  "winbond",
+]
+
+[[package]]
+name = "flashmap"
+version = "0.1.0"
+dependencies = [
+ "defmt 1.0.1",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-nand",
+ "thiserror",
 ]
 
 [[package]]

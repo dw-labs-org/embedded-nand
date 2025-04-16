@@ -1,12 +1,14 @@
 #![no_std]
+
+pub mod iter;
 pub trait NandFlashError {
     /// Convert a specific NAND flash error into a generic error kind
     fn kind(&self) -> NandFlashErrorKind;
 }
 
-/// A trait that NorFlash implementations can use to share an error type.
+/// A trait that NandFlash implementations can use to share an error type.
 pub trait ErrorType {
-    /// Errors returned by this NOR flash.
+    /// Errors returned by this NAND flash.
     type Error: NandFlashError;
 }
 
@@ -36,9 +38,24 @@ pub enum NandFlashErrorKind {
 }
 
 /// Read only NAND flash trait.
-pub trait ReadNandFlash: ErrorType {
+pub trait NandFlash: ErrorType {
     /// The minumum number of bytes the storage peripheral can read
     const READ_SIZE: usize;
+
+    /// Size of a page in bytes
+    const PAGE_SIZE: usize;
+
+    /// Number of pages in a block
+    const PAGES_PER_BLOCK: usize;
+
+    /// Number of blocks
+    const BLOCK_COUNT: usize;
+
+    /// The minumum number of bytes the storage peripheral can erase (block or sector size)
+    const ERASE_SIZE: usize;
+
+    /// The minumum number of bytes the storage peripheral can write
+    const WRITE_SIZE: usize;
 
     /// Read a slice of data from the storage peripheral, starting the read
     /// operation at the given address offset, and reading `bytes.len()` bytes.
@@ -54,44 +71,15 @@ pub trait ReadNandFlash: ErrorType {
     fn capacity(&self) -> u32;
 
     /// Check status of block according to bad block marker and ECC / Checksum status
-    fn block_status(&mut self, address: u32) -> Result<BlockStatus, Self::Error>;
+    fn block_status(&mut self, block: u16) -> Result<BlockStatus, Self::Error>;
 
     /// Check if the block is marked as bad
-    fn block_is_bad(&mut self, address: u32) -> Result<bool, Self::Error> {
+    fn block_is_bad(&mut self, address: u16) -> Result<bool, Self::Error> {
         match self.block_status(address)? {
             BlockStatus::Failed => Ok(true),
             _ => Ok(false),
         }
     }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, defmt::Format)]
-#[non_exhaustive]
-pub enum BlockStatus {
-    /// Marked OK and passes ECC / Checksum
-    Ok,
-    // /// Not marked as failed by the manufacturer
-    // MarkedOk,
-    /// Marked as failed or failed ECC / Checksum
-    Failed,
-}
-
-/// Return whether a read operation is within bounds.
-pub fn check_read<T: ReadNandFlash>(
-    flash: &T,
-    offset: u32,
-    length: usize,
-) -> Result<(), NandFlashErrorKind> {
-    check_slice(flash, T::READ_SIZE, offset, length)
-}
-
-/// NAND flash trait.
-pub trait NandFlash: ReadNandFlash {
-    /// The minumum number of bytes the storage peripheral can write (page size)
-    const WRITE_SIZE: usize;
-
-    /// The minumum number of bytes the storage peripheral can erase (block or sector size)
-    const ERASE_SIZE: usize;
 
     /// Erase the given storage range, clearing all data within `[from..to]`.
     /// The given range will contain all 1s afterwards.
@@ -105,6 +93,9 @@ pub trait NandFlash: ReadNandFlash {
     /// helper function.
     fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error>;
 
+    /// Erase a block by block index.
+    fn erase_block(&mut self, block: u16) -> Result<(), Self::Error>;
+
     /// If power is lost during write, the contents of the written words are undefined,
     /// but the rest of the page is guaranteed to be unchanged.
     /// It is not allowed to write to the same word twice.
@@ -115,8 +106,51 @@ pub trait NandFlash: ReadNandFlash {
     /// can use the [`check_write`] helper function.
     fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error>;
 
+    /// Copy data from one location to another.
+    ///
+    /// Some devices support internal copy commands, which are faster than
+    /// reading and writing the data. This function should be used to
+    /// implement the copy command.
+    fn copy(&mut self, src_offset: u32, dest_offset: u32, length: u32) -> Result<(), Self::Error>;
+
     /// Mark the block as bad
-    fn mark_bad(&mut self, address: u32) -> Result<(), Self::Error>;
+    fn mark_block_bad(&mut self, block: u16) -> Result<(), Self::Error>;
+
+    /// Iterate over block addresses
+    fn block_iter(&self, start: u16) -> iter::BlockIter {
+        iter::BlockIter {
+            block_size: Self::ERASE_SIZE as u32,
+            count: start,
+            block_count: Self::BLOCK_COUNT as u16,
+        }
+    }
+
+    /// Iterate over page addresses
+    fn page_iter(&self, start: u32) -> iter::PageIter {
+        iter::PageIter {
+            page_size: Self::PAGE_SIZE as u32,
+            count: start,
+            page_count: (Self::BLOCK_COUNT * Self::ERASE_SIZE / Self::PAGE_SIZE) as u32,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, defmt::Format)]
+#[non_exhaustive]
+pub enum BlockStatus {
+    /// Marked OK and passes ECC / Checksum
+    Ok,
+    /// Marked as failed or failed ECC / Checksum
+    Failed,
+}
+
+/// Return whether a read operation is within bounds.
+pub fn check_read<T: NandFlash>(
+    flash: &T,
+    offset: u32,
+    length: usize,
+) -> Result<(), NandFlashErrorKind> {
+    check_slice(flash, T::READ_SIZE, offset, length)
 }
 
 /// Return whether an erase operation is aligned and within bounds.
@@ -139,7 +173,7 @@ pub fn check_write<T: NandFlash>(
     check_slice(flash, T::WRITE_SIZE, offset, length)
 }
 
-fn check_slice<T: ReadNandFlash>(
+fn check_slice<T: NandFlash>(
     flash: &T,
     align: usize,
     offset: u32,

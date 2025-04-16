@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 winbond = { path = "../winbond" }
 spi-flash = { path = "../spi-flash" }
+flashmap = { path = "../flashmap", features = ["defmt"] }
 
 defmt = { version = "1" }
 defmt-rtt = "1"
@@ -40,9 +41,3 @@ embassy-stm32 = { version = "0.2.0", default-features = false, features = [
     "exti",
 ] }
 embedded-hal-bus = { version = "0.2.0", features = ["async", "defmt-03"] }
-
-[[bin]]
-name = "spiflash"
-test = false
-doctest = false
-bench = false

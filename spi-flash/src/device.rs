@@ -1,9 +1,7 @@
 use core::fmt::Debug;
 
 use embedded_hal::spi::SpiDevice;
-use embedded_nand::{
-    BlockStatus, ErrorType, NandFlash, NandFlashError, NandFlashErrorKind, ReadNandFlash,
-};
+use embedded_nand::{BlockStatus, ErrorType, NandFlash, NandFlashError, NandFlashErrorKind};
 
 use crate::{
     address::{BlockAddress, ByteAddress, PageAddress},
@@ -299,10 +297,13 @@ impl<SPI: SpiDevice> NandFlashError for SpiFlashError<SPI> {
         todo!()
     }
 }
-impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> ReadNandFlash
-    for SpiFlash<SPI, D, N>
-{
+
+impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for SpiFlash<SPI, D, N> {
     const READ_SIZE: usize = D::READ_SIZE as usize;
+    const PAGE_SIZE: usize = D::PAGE_SIZE as usize;
+    const BLOCK_COUNT: usize = D::BLOCK_COUNT as usize;
+    const ERASE_SIZE: usize = D::BLOCK_SIZE as usize;
+    const PAGES_PER_BLOCK: usize = D::PAGES_PER_BLOCK as usize;
 
     fn read(&mut self, offset: u32, mut bytes: &mut [u8]) -> Result<(), Self::Error> {
         let ba = ByteAddress(offset);
@@ -333,21 +334,17 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> ReadNandFlash
         D::CAPACITY
     }
 
-    fn block_status(&mut self, address: u32) -> Result<BlockStatus, Self::Error> {
+    fn block_status(&mut self, block: u16) -> Result<BlockStatus, Self::Error> {
         if self
             .device
-            .block_marked_bad(&mut self.spi, address.into())?
+            .block_marked_bad(&mut self.spi, BlockAddress(block as u32))?
         {
             Ok(BlockStatus::Failed)
         } else {
             Ok(BlockStatus::Ok)
         }
     }
-}
-
-impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for SpiFlash<SPI, D, N> {
     const WRITE_SIZE: usize = D::PAGE_SIZE as usize;
-    const ERASE_SIZE: usize = D::BLOCK_SIZE as usize;
 
     fn erase(&mut self, mut offset: u32, length: u32) -> Result<(), Self::Error> {
         loop {
@@ -371,7 +368,15 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
         Ok(())
     }
 
-    fn mark_bad(&mut self, address: u32) -> Result<(), Self::Error> {
+    fn erase_block(&mut self, block: u16) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn copy(&mut self, src_offset: u32, dest_offset: u32, length: u32) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn mark_block_bad(&mut self, block: u16) -> Result<(), Self::Error> {
         todo!()
     }
 }
