@@ -5,6 +5,7 @@ use core::{error, ops::Range, slice};
 use embedded_nand::{BlockIndex, BlockStatus, ByteAddress, NandFlash, NandFlashError};
 use thiserror::Error;
 mod fmt;
+use embedded_nand::address::AddressConversions;
 
 /// Magic bytes at the start of the flashmap
 const MAGIC: [u8; 4] = *b"FMAP";
@@ -303,9 +304,9 @@ where
         // Increment the write count
         self.data.header.write_count += 1;
         // Check if we need to write to a new block
-        let current_block = self.data_address.as_block_index(F::ERASE_SIZE as u32);
+        let current_block = Self::byte_to_block_index(self.data_address);
         self.data_address += self.map_page_count * F::PAGE_SIZE as u32;
-        let mut new_block = self.data_address.as_block_index(F::ERASE_SIZE as u32);
+        let mut new_block = Self::byte_to_block_index(self.data_address);
         if new_block != current_block {
             // Get the other block for map
             new_block = if self.data.header.map_blocks[0] == current_block {
@@ -333,7 +334,7 @@ where
                 }
             }
             // Update the address
-            self.data_address = new_block.as_byte_address(F::ERASE_SIZE as u32);
+            self.data_address = Self::block_to_byte_address(new_block);
         }
 
         // Write the map to flash

@@ -1,6 +1,6 @@
 #![no_std]
 
-mod address;
+pub mod address;
 pub mod iter;
 pub use address::{BlockIndex, ByteAddress, ColumnAddress, PageIndex};
 

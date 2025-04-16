@@ -15,6 +15,14 @@ impl PageIndex {
         self.0
     }
 
+    pub fn as_block_index(&self, pages_per_block: u32) -> BlockIndex {
+        BlockIndex((self.0 / pages_per_block) as u16)
+    }
+
+    pub fn as_byte_address(&self, page_size: u32) -> ByteAddress {
+        ByteAddress(self.0 * page_size)
+    }
+
     pub fn from_byte_address(ba: ByteAddress, page_size: u32) -> Self {
         PageIndex(ba.0 / page_size)
     }
@@ -160,17 +168,41 @@ impl ColumnAddress {
     }
 }
 
-/// Convert a [PageIndex] to a [ByteAddress]
-pub fn page_to_byte_address<F: NandFlash>(page: PageIndex) -> ByteAddress {
-    ByteAddress(page.0 * F::PAGE_SIZE as u32)
+/// Trait for converting between page and block indices and byte and column addresses
+pub trait AddressConversions {
+    fn page_to_byte_address(page: PageIndex) -> ByteAddress;
+    fn page_to_block_index(page: PageIndex) -> BlockIndex;
+    fn block_to_page_index(block: BlockIndex) -> PageIndex;
+    fn block_to_byte_address(block: BlockIndex) -> ByteAddress;
+    fn byte_to_page_index(byte: ByteAddress) -> PageIndex;
+    fn byte_to_block_index(byte: ByteAddress) -> BlockIndex;
+    fn byte_to_column_address(byte: ByteAddress) -> ColumnAddress;
+    fn byte_to_block_offset(byte: ByteAddress) -> u32;
 }
 
-/// Convert a [PageIndex] to a [BlockIndex]
-pub fn page_to_block_address<F: NandFlash>(page: PageIndex) -> BlockIndex {
-    BlockIndex((page.0 / F::PAGES_PER_BLOCK as u32) as u16)
-}
-
-/// Convert a [BlockIndex] to a [PageIndex]
-pub fn block_to_page_address<F: NandFlash>(block: BlockIndex) -> PageIndex {
-    PageIndex(block.0 as u32 * F::PAGES_PER_BLOCK as u32)
+impl<T: NandFlash> AddressConversions for T {
+    fn page_to_byte_address(page: PageIndex) -> ByteAddress {
+        page.as_byte_address(Self::PAGE_SIZE as u32)
+    }
+    fn page_to_block_index(page: PageIndex) -> BlockIndex {
+        page.as_block_index(Self::PAGES_PER_BLOCK as u32)
+    }
+    fn block_to_page_index(block: BlockIndex) -> PageIndex {
+        block.as_page_index(Self::PAGES_PER_BLOCK as u32)
+    }
+    fn block_to_byte_address(block: BlockIndex) -> ByteAddress {
+        block.as_byte_address(Self::ERASE_SIZE as u32)
+    }
+    fn byte_to_page_index(byte: ByteAddress) -> PageIndex {
+        byte.as_page_index(Self::PAGE_SIZE as u32)
+    }
+    fn byte_to_block_index(byte: ByteAddress) -> BlockIndex {
+        byte.as_block_index(Self::ERASE_SIZE as u32)
+    }
+    fn byte_to_column_address(byte: ByteAddress) -> ColumnAddress {
+        byte.as_column_address(Self::PAGE_SIZE as u32)
+    }
+    fn byte_to_block_offset(byte: ByteAddress) -> u32 {
+        byte.block_offset(Self::ERASE_SIZE as u32)
+    }
 }
