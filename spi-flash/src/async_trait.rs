@@ -4,8 +4,9 @@ use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
 
 use crate::{ECCStatus, JedecID, SpiNand};
 
-// #[cfg(target_feature = "defmt")]
-#[derive(defmt::Format)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SpiFlashErrorASync<SPI: SpiDevice> {
     /// Error from the SPI peripheral
     SPI(SPI::Error),

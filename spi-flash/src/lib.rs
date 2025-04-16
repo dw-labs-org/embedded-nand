@@ -1,8 +1,8 @@
 #![no_std]
-
 pub mod async_trait;
 pub mod blocking;
 pub mod device;
+mod fmt;
 
 /// Core trait that a NAND flash device must implement.
 ///
@@ -60,6 +60,9 @@ pub trait SpiNand<const N: usize> {
     const DEEP_POWER_DOWN_EXIT_COMMAND: u8 = 0xAB;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ECCStatus {
     Ok,
     Corrected,
@@ -69,7 +72,8 @@ pub enum ECCStatus {
 
 /// The JEDEC manufacturer ID of a flash device
 /// See https://www.jedec.org/standards-documents/docs/jep-106ab for a list of JEDEC IDs
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct JedecID {
     /// First non 0x7F byte read from Jedec command
     id: u8,
@@ -83,7 +87,7 @@ impl JedecID {
         JedecID { id, bank }
     }
 }
-
+#[cfg(feature = "defmt")]
 impl defmt::Format for JedecID {
     fn format(&self, f: defmt::Formatter) {
         defmt::write!(f, "JedecID(id: {:02X}, bank: {})", self.id, self.bank);

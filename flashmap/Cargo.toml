@@ -4,14 +4,20 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+defmt = { version = "0.3", optional = true }
+log = { version = "0.4.27", optional = true }
+serde = { version = "1", optional = true, default-features = false, features = [
+    "derive",
+] }
 embedded-hal = { version = "1.0.0", features = ["defmt-03"] }
 embedded-hal-async = { version = "1.0.0", features = ["defmt-03"] }
 embedded-nand = { path = "../embedded-nand" }
 
-defmt = "1.0.1"
+
 thiserror = { version = "2.0.12", default-features = false }
 
 
 [features]
-defmt = ["embedded-nand/defmt"]
-log = ["embedded-nand/log"]
+defmt = ["dep:defmt", "embedded-nand/defmt"]
+log = ["dep:log", "embedded-nand/log"]
+serde = ["dep:serde"]

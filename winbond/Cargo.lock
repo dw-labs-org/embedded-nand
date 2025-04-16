@@ -107,7 +107,6 @@ dependencies = [
 name = "spi-flash"
 version = "0.1.0"
 dependencies = [
- "defmt",
  "embedded-hal",
  "embedded-hal-async",
  "embedded-nand",

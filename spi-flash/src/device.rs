@@ -14,11 +14,11 @@ use crate::{
 
 use super::JedecID;
 
-#[derive(Debug, defmt::Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SpiFlash<SPI, D, const N: usize> {
     pub spi: SPI,
     pub device: D,
-    // page_size: usize,
 }
 
 impl<SPI, D, const N: usize> SpiFlash<SPI, D, N> {
