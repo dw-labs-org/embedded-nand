@@ -1,8 +1,8 @@
 #![no_std]
 
-use core::{error, ops::Range, slice};
+use core::ops::Range;
 
-use embedded_nand::{BlockIndex, BlockStatus, ByteAddress, NandFlash, NandFlashError};
+use embedded_nand::{BlockIndex, ByteAddress, NandFlashError};
 use thiserror::Error;
 mod fmt;
 use embedded_nand::address::AddressConversions;
@@ -120,7 +120,7 @@ where
                 for page in (0..F::PAGES_PER_BLOCK).step_by(map_page_count as usize) {
                     let address = block_address + (page * F::PAGE_SIZE) as u32;
                     // Check if the map is valid
-                    if let Some((new_header)) = flashmap
+                    if let Some(new_header) = flashmap
                         .get_map_data(address)
                         .map_err(|e| Error::Flash(e))?
                     {
