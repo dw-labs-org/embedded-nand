@@ -2,7 +2,7 @@
 
 mod address;
 pub mod iter;
-pub use address::{BlockAddress, ByteAddress, ColumnAddress, PageAddress};
+pub use address::{BlockIndex, ByteAddress, ColumnAddress, PageIndex};
 
 pub trait NandFlashError {
     /// Convert a specific NAND flash error into a generic error kind
@@ -74,11 +74,11 @@ pub trait NandFlash: ErrorType {
     fn capacity(&self) -> u32;
 
     /// Check status of block according to bad block marker and ECC / Checksum status
-    fn block_status(&mut self, block: u16) -> Result<BlockStatus, Self::Error>;
+    fn block_status(&mut self, block: BlockIndex) -> Result<BlockStatus, Self::Error>;
 
     /// Check if the block is marked as bad
-    fn block_is_bad(&mut self, address: u16) -> Result<bool, Self::Error> {
-        match self.block_status(address)? {
+    fn block_is_bad(&mut self, block: BlockIndex) -> Result<bool, Self::Error> {
+        match self.block_status(block)? {
             BlockStatus::Failed => Ok(true),
             _ => Ok(false),
         }
@@ -97,7 +97,7 @@ pub trait NandFlash: ErrorType {
     fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error>;
 
     /// Erase a block by block index.
-    fn erase_block(&mut self, block: u16) -> Result<(), Self::Error>;
+    fn erase_block(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
 
     /// If power is lost during write, the contents of the written words are undefined,
     /// but the rest of the page is guaranteed to be unchanged.
@@ -117,13 +117,13 @@ pub trait NandFlash: ErrorType {
     fn copy(&mut self, src_offset: u32, dest_offset: u32, length: u32) -> Result<(), Self::Error>;
 
     /// Mark the block as bad
-    fn mark_block_bad(&mut self, block: u16) -> Result<(), Self::Error>;
+    fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
 
     /// Iterate over block addresses
-    fn block_iter(&self, start: u16) -> iter::BlockIter {
+    fn block_iter(&self, start: BlockIndex) -> iter::BlockIter {
         iter::BlockIter {
             block_size: Self::ERASE_SIZE as u32,
-            count: start,
+            count: start.into(),
             block_count: Self::BLOCK_COUNT as u16,
         }
     }
@@ -138,7 +138,7 @@ pub trait NandFlash: ErrorType {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, defmt::Format)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[non_exhaustive]
 pub enum BlockStatus {
     /// Marked OK and passes ECC / Checksum

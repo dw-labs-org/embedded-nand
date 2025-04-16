@@ -1,3 +1,5 @@
+use crate::{BlockIndex, ByteAddress};
+
 /// Iterate over byte addresses of blocks in nand flash
 pub struct BlockIter {
     pub(crate) block_size: u32,
@@ -6,13 +8,14 @@ pub struct BlockIter {
 }
 
 impl Iterator for BlockIter {
-    type Item = u32;
+    type Item = (BlockIndex, ByteAddress);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.count < self.block_count {
-            let block = self.count as u32 * self.block_size;
+            let ind = BlockIndex(self.count);
+            let address = self.count as u32 * self.block_size;
             self.count += 1;
-            Some(block)
+            Some((ind, ByteAddress(address)))
         } else {
             None
         }

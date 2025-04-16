@@ -9,7 +9,7 @@ use embassy_executor::Spawner;
 use embassy_stm32::lptim::timer::Timer;
 use embassy_stm32::{can::BufferedCan, gpio::Output};
 
-use embedded_nand::{BlockAddress, PageAddress};
+use embedded_nand::{BlockIndex, PageIndex};
 use spi_flash::blocking::SpiNandBlocking;
 use spi_flash::{
     SpiNand,
@@ -86,20 +86,12 @@ async fn main(spawner: Spawner) {
     dbg!(flash.reset_blocking());
     dbg!(flash.jedec_blocking());
     dbg!(flash.disable_block_protection().await);
-    let ba = BlockAddress::from(0);
-    let pa = PageAddress::from_block_address(ba, 64);
-    dbg!(flash.erase_block_blocking(1.into()));
+    let ba = BlockIndex::new(0);
+    let pa = PageIndex::from_block_address(ba, 64);
 
     embassy_time::Timer::after_secs(1).await;
     // // Mark a block as bad
-    // dbg!(flash.device.mark_block_bad(&mut flash.spi, ba));
 
-    let mut rbuf = [0; 5];
-    dbg!(flash.read_page_slice_blocking((0 * 64).into(), 2047.into(), &mut rbuf));
-    dbg!(rbuf);
-    // flash.page_read(pa).await;
-    // flash.page_read_buffer(2047.into(), &mut rbuf).await;
-    // dbg!(rbuf);
     embassy_time::Timer::after_secs(1).await;
     defmt::info!("Checking bad blocks");
     // flash.mark_block_bad_blocking(1.into());
@@ -107,7 +99,7 @@ async fn main(spawner: Spawner) {
     for i in 0..2048 {
         if flash
             .device
-            .block_marked_bad(&mut flash.spi, i.into())
+            .block_marked_bad(&mut flash.spi, BlockIndex::new(i))
             .unwrap_or_else(|_| panic!("Failed to read block status"))
         {
             defmt::error!("Block {} is marked bad", i);

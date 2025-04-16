@@ -2,7 +2,7 @@
 
 use core::{error, ops::Range, slice};
 
-use embedded_nand::{BlockStatus, NandFlash, NandFlashError};
+use embedded_nand::{BlockIndex, BlockStatus, ByteAddress, NandFlash, NandFlashError};
 use thiserror::Error;
 mod fmt;
 
@@ -56,7 +56,7 @@ pub struct FlashMap<F, const LBC: usize> {
     /// Number of pages for the [FlashMapData] struct, map array and terminator
     map_page_count: u32,
     /// Address of map data
-    data_address: u32,
+    data_address: ByteAddress,
 }
 
 impl<F, const LBC: usize> FlashMap<F, LBC>
@@ -93,7 +93,7 @@ where
         let mut flashmap = FlashMap {
             flash,
             data: FlashMapData::new(F::BLOCK_COUNT as u16, LBC as u16),
-            data_address: 0,
+            data_address: Default::default(),
             map_page_count,
         };
 
@@ -102,17 +102,17 @@ where
         // If a map is found, the values in the map are used to ensure that if one block
         // is bad, no other blocks are overwritten
         let mut count = 0;
-        let mut map_blocks = [0; 2];
+        let mut map_blocks = [BlockIndex::default(); 2];
         let mut valid_header = None;
         // Go through first 2 valid blocks to try find a map
-        for (block_ind, block_address) in flashmap.flash.block_iter(0).enumerate() {
+        for (block_ind, block_address) in flashmap.flash.block_iter(BlockIndex::new(0)) {
             // check if block is good
             if !flashmap
                 .flash
-                .block_is_bad(block_ind as u16)
+                .block_is_bad(block_ind)
                 .map_err(|e| Error::Flash(e))?
             {
-                map_blocks[count] = block_ind as u16;
+                map_blocks[count] = block_ind;
                 count += 1;
 
                 // Go through each possible map location
@@ -163,20 +163,20 @@ where
         // Iterate over the blocks to find LBC good blocks
         let mut logical_ind = 0;
         let mut final_block = None;
-        for (block_ind, block_address) in flashmap.flash.block_iter(first_block).enumerate() {
+        for (block_ind, block_address) in flashmap.flash.block_iter(first_block) {
             // Check if the block is good
             if !flashmap
                 .flash
-                .block_is_bad(block_ind as u16)
+                .block_is_bad(block_ind)
                 .map_err(|e| Error::Flash(e))?
             {
                 // Record logical to physical mapping
-                flashmap.data.map[logical_ind] = block_ind as u16;
+                flashmap.data.map[logical_ind] = block_ind;
                 logical_ind += 1;
                 // Check if we have enough blocks
                 if logical_ind >= LBC {
                     // We have enough blocks, so break out of the loop
-                    final_block = Some(block_ind as u16);
+                    final_block = Some(block_ind);
                     flashmap.data_address = block_address;
                     break;
                 }
@@ -194,7 +194,7 @@ where
             info!("Next block to use: {}", next);
         } else {
             warn!("No valid blocks remaining");
-            flashmap.data.header.final_block = 0;
+            flashmap.data.header.final_block = BlockIndex::new(0);
         }
         // Save the map config
         flashmap.data.header.map_blocks = map_blocks;
@@ -223,20 +223,20 @@ where
     }
 
     /// Convert a logical block index to a physical block
-    fn logical_to_physical(&self, logical_block: u16) -> Result<u16, Error<F>> {
-        if logical_block >= LBC as u16 {
+    fn logical_to_physical(&self, logical_block: BlockIndex) -> Result<BlockIndex, Error<F>> {
+        if logical_block.as_u16() >= LBC as u16 {
             return Err(Error::InvalidBlockAddress);
         }
-        Ok(self.data.map[logical_block as usize])
+        Ok(self.data.map[logical_block.as_u16() as usize])
     }
 
     /// Address of the map array
-    fn map_address(&self) -> u32 {
+    fn map_address(&self) -> ByteAddress {
         self.data_address + core::mem::size_of::<FlashMapHeader>() as u32
     }
 
     /// Try to load a map from the given address
-    fn get_map_data(&mut self, address: u32) -> Result<Option<FlashMapHeader>, F::Error> {
+    fn get_map_data(&mut self, address: ByteAddress) -> Result<Option<FlashMapHeader>, F::Error> {
         // Create data and
         let mut data = FlashMapHeader::default();
 
@@ -246,13 +246,14 @@ where
                 core::mem::size_of::<FlashMapHeader>(),
             )
         };
-        self.flash.read(address, slice)?;
+        self.flash.read(address.into(), slice)?;
         // Check it matches what is expected
         if self.data.header.is_valid(&data) {
             // check that terminating magic bytes are present
             let mut term = [0; 4];
             let term_location = Self::map_size_in_flash() - MAGIC.len();
-            self.flash.read(address + term_location as u32, &mut term)?;
+            self.flash
+                .read((address + term_location as u32).as_u32(), &mut term)?;
 
             if term != MAGIC {
                 trace!("Missing terminator at {:#X}", address);
@@ -285,12 +286,12 @@ where
         debug!("Loading map array from {:#X}", map_address);
         let slice = unsafe {
             core::slice::from_raw_parts_mut(
-                &mut self.data.map as *mut [u16; LBC] as *mut u8,
+                &mut self.data.map as *mut [BlockIndex; LBC] as *mut u8,
                 core::mem::size_of::<[u16; LBC]>(),
             )
         };
         self.flash
-            .read(map_address, slice)
+            .read(map_address.as_u32(), slice)
             .map_err(|e| Error::Flash(e))?;
         Ok(())
     }
@@ -302,9 +303,9 @@ where
         // Increment the write count
         self.data.header.write_count += 1;
         // Check if we need to write to a new block
-        let current_block = (self.data_address / F::ERASE_SIZE as u32) as u16;
+        let current_block = self.data_address.as_block_index(F::ERASE_SIZE as u32);
         self.data_address += self.map_page_count * F::PAGE_SIZE as u32;
-        let mut new_block = (self.data_address / F::ERASE_SIZE as u32) as u16;
+        let mut new_block = self.data_address.as_block_index(F::ERASE_SIZE as u32);
         if new_block != current_block {
             // Get the other block for map
             new_block = if self.data.header.map_blocks[0] == current_block {
@@ -332,7 +333,7 @@ where
                 }
             }
             // Update the address
-            self.data_address = (new_block as u32) * F::ERASE_SIZE as u32;
+            self.data_address = new_block.as_byte_address(F::ERASE_SIZE as u32);
         }
 
         // Write the map to flash
@@ -353,7 +354,7 @@ where
         };
         // Write the data to flash
         self.flash
-            .write(self.data_address, slice)
+            .write(self.data_address.as_u32(), slice)
             .map_err(|e| Error::Flash(e))?;
         Ok(())
     }
@@ -362,10 +363,10 @@ where
     ///
     /// This will erase the block and return the block number, updating the final block in the header.
     /// If no blocks are available, it will return an error.
-    fn next_spare_block(&mut self) -> Result<u16, Error<F>> {
+    fn next_spare_block(&mut self) -> Result<BlockIndex, Error<F>> {
         loop {
             self.data.header.final_block += 1;
-            if self.data.header.final_block >= self.data.header.block_count {
+            if self.data.header.final_block.as_u16() >= self.data.header.block_count {
                 // No more blocks available
                 return Err(Error::NotEnoughValidBlocks);
             }
@@ -384,7 +385,7 @@ where
     /// Erase a physical block, checking if the erase fails and it needs replacing.
     ///
     /// Returns true if Ok, false if the block is bad.
-    fn checked_erase_block(&mut self, block: u16) -> Result<bool, Error<F>> {
+    fn checked_erase_block(&mut self, block: BlockIndex) -> Result<bool, Error<F>> {
         match self.flash.erase_block(block) {
             Ok(_) => Ok(true),
             // check if block has failed
@@ -402,8 +403,12 @@ where
     /// Read a physical slice from flash that does not cross a block boundary, checking for block errors
     ///
     /// WARNING: Does not move data if failing, up to caller to handle this.
-    fn checked_read_slice(&mut self, offset: u32, bytes: &mut [u8]) -> Result<bool, Error<F>> {
-        match self.flash.read(offset, bytes) {
+    fn checked_read_slice(
+        &mut self,
+        offset: ByteAddress,
+        bytes: &mut [u8],
+    ) -> Result<bool, Error<F>> {
+        match self.flash.read(offset.as_u32(), bytes) {
             Ok(_) => Ok(true),
             Err(e) => match e.kind() {
                 embedded_nand::NandFlashErrorKind::BlockFailing(_) => Ok(false),
@@ -417,8 +422,8 @@ where
     /// WARNING: Does not move data if failing, up to caller to handle this.
     ///
     /// Both BlockFailing and BlockFail are considered recoverable errors.
-    fn checked_write_slice(&mut self, offset: u32, bytes: &[u8]) -> Result<bool, Error<F>> {
-        match self.flash.write(offset, bytes) {
+    fn checked_write_slice(&mut self, offset: ByteAddress, bytes: &[u8]) -> Result<bool, Error<F>> {
+        match self.flash.write(offset.as_u32(), bytes) {
             Ok(_) => Ok(true),
             Err(e) => match e.kind() {
                 embedded_nand::NandFlashErrorKind::BlockFailing(_) => Ok(false),
@@ -432,7 +437,7 @@ where
     ///
     /// Copies over the block up to length, updates the map, marks the old block as bad
     /// and erases it.
-    fn remap_block(&mut self, logical_block: u16, length: u32) -> Result<(), Error<F>> {
+    fn remap_block(&mut self, logical_block: BlockIndex, length: u32) -> Result<(), Error<F>> {
         // Get the physical block
         let physical_block = self.logical_to_physical(logical_block)?;
 
@@ -445,15 +450,17 @@ where
         // Copy the block to the new location
         self.flash
             .copy(
-                physical_block as u32 * F::ERASE_SIZE as u32,
-                next_block as u32 * F::ERASE_SIZE as u32,
+                physical_block
+                    .as_byte_address(F::ERASE_SIZE as u32)
+                    .as_u32(),
+                next_block.as_byte_address(F::ERASE_SIZE as u32).as_u32(),
                 length,
             )
             .map_err(|e| Error::Flash(e))?;
         // Mark the old block as bad (ignore errors)
         let _ = self.flash.mark_block_bad(physical_block);
         // Update the map
-        self.data.map[logical_block as usize] = next_block;
+        self.data.map[logical_block.as_u16() as usize] = next_block;
         // Write the map to flash
         self.update_map()
     }
@@ -464,16 +471,16 @@ where
         logical_offset: u32,
         bytes: &[u8],
         slice_offset: usize,
-    ) -> Result<(u32, Range<usize>), Error<F>> {
-        let logical_offset = logical_offset + slice_offset as u32;
+    ) -> Result<(ByteAddress, Range<usize>), Error<F>> {
+        let logical_offset = ByteAddress::new(logical_offset + slice_offset as u32);
         // Get the logical block
-        let logical_block = (logical_offset) / F::ERASE_SIZE as u32;
+        let logical_block = logical_offset.as_block_index(F::ERASE_SIZE as u32);
         // Get the physical block
-        let physical_block = self.logical_to_physical(logical_block as u16)?;
+        let physical_block = self.logical_to_physical(logical_block)?;
         // Get the offset into the block
-        let block_offset = logical_offset % F::ERASE_SIZE as u32;
+        let block_offset = logical_offset.block_offset(F::ERASE_SIZE as u32);
         // Get the physical byte address
-        let physical_offset = physical_block as u32 * F::ERASE_SIZE as u32 + block_offset;
+        let physical_offset = physical_block.as_byte_address(F::ERASE_SIZE as u32) + block_offset;
         // Get the number of bytes to read
         let block_remaining = F::ERASE_SIZE as u32 - block_offset;
         // The number of bytes left to in slice
@@ -523,7 +530,7 @@ where
             if !self.checked_read_slice(physical_offset, &mut bytes[range])? {
                 // Block is failing but read was fine, remap the whole block
                 self.remap_block(
-                    (offset / Self::ERASE_SIZE as u32) as u16,
+                    BlockIndex::from_raw_byte_offset(offset, F::ERASE_SIZE as u32),
                     Self::ERASE_SIZE as u32,
                 )?;
             }
@@ -539,7 +546,10 @@ where
     }
 
     /// By definition of the flashmap, this will always return Ok
-    fn block_status(&mut self, block: u16) -> Result<embedded_nand::BlockStatus, Self::Error> {
+    fn block_status(
+        &mut self,
+        block: BlockIndex,
+    ) -> Result<embedded_nand::BlockStatus, Self::Error> {
         Ok(embedded_nand::BlockStatus::Ok)
     }
 
@@ -566,8 +576,8 @@ where
                 // Remap the block and try again on new physical block
                 // Only remap up to just before this write
                 self.remap_block(
-                    (offset / Self::ERASE_SIZE as u32) as u16,
-                    physical_offset % Self::ERASE_SIZE as u32,
+                    BlockIndex::from_raw_byte_offset(offset, F::ERASE_SIZE as u32),
+                    physical_offset.block_offset(Self::ERASE_SIZE as u32),
                 )?;
                 // Continue allows a retry on the new block
                 continue;
@@ -584,14 +594,14 @@ where
     ///
     /// This will find the next spare block and remap the logical block to it.
     /// WARNING: Does not move data, which is effectively lost.
-    fn mark_block_bad(&mut self, block: u16) -> Result<(), Self::Error> {
+    fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error> {
         let physical = self.logical_to_physical(block)?;
         // Mark the block as bad (ignore error if it fails)
         let _ = self.flash.mark_block_bad(physical);
         // Find the next valid block
         let next_block = self.next_spare_block()?;
         // Update the mapping
-        self.data.map[block as usize] = next_block;
+        self.data.map[block.as_u16() as usize] = next_block;
         // write to flash
         self.update_map()
     }
@@ -599,7 +609,7 @@ where
     /// Erases the physical block of the supplied logical block.
     ///
     /// If the erase fails with [embedded_nand::NandFlashErrorKind::BlockFail], it will mark the block as bad and remap it.
-    fn erase_block(&mut self, block: u16) -> Result<(), Self::Error> {
+    fn erase_block(&mut self, block: BlockIndex) -> Result<(), Self::Error> {
         let block = self.logical_to_physical(block)?;
         // Erase the block, checing for fail
         if self.checked_erase_block(block)? {
@@ -620,7 +630,7 @@ struct FlashMapData<const LBC: usize> {
     /// Header
     header: FlashMapHeader,
     /// Map array
-    map: [u16; LBC],
+    map: [BlockIndex; LBC],
     /// Terminator
     terminator: [u8; 4],
 }
@@ -630,7 +640,7 @@ impl<const LBC: usize> FlashMapData<LBC> {
     fn new(block_count: u16, logical_block_count: u16) -> Self {
         FlashMapData {
             header: FlashMapHeader::new(block_count, logical_block_count),
-            map: [0; LBC],
+            map: [BlockIndex::new(0); LBC],
             terminator: MAGIC,
         }
     }
@@ -653,11 +663,11 @@ struct FlashMapHeader {
     /// Number of logical blocks
     logical_block_count: u16,
     /// Next block to use
-    final_block: u16,
+    final_block: BlockIndex,
     /// Number of times the map has been written
     write_count: u32,
     /// The blocks used for the map
-    map_blocks: [u16; 2],
+    map_blocks: [BlockIndex; 2],
 }
 
 impl Ord for FlashMapHeader {
@@ -680,9 +690,9 @@ impl FlashMapHeader {
             version: VERSION,
             block_count,
             logical_block_count,
-            final_block: 0,
+            final_block: BlockIndex::new(0),
             write_count: 0,
-            map_blocks: [0; 2],
+            map_blocks: [BlockIndex::new(0); 2],
         }
     }
 

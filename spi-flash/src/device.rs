@@ -2,8 +2,8 @@ use core::fmt::Debug;
 
 use embedded_hal::spi::SpiDevice;
 use embedded_nand::{
-    BlockAddress, BlockStatus, ByteAddress, ColumnAddress, ErrorType, NandFlash, NandFlashError,
-    NandFlashErrorKind, PageAddress,
+    BlockIndex, BlockStatus, ByteAddress, ColumnAddress, ErrorType, NandFlash, NandFlashError,
+    NandFlashErrorKind, PageIndex,
 };
 
 use crate::{
@@ -36,16 +36,13 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         self.device.reset_cmd(&mut self.spi)
     }
     /// Erase a block
-    pub fn erase_block_blocking(
-        &mut self,
-        block_address: BlockAddress,
-    ) -> Result<(), SpiFlashError<SPI>> {
-        self.device.erase_block(&mut self.spi, block_address)
+    pub fn erase_block_blocking(&mut self, block: BlockIndex) -> Result<(), SpiFlashError<SPI>> {
+        self.device.erase_block(&mut self.spi, block)
     }
     /// Read a page
     pub fn page_read_blocking(
         &mut self,
-        page_address: PageAddress,
+        page_address: PageIndex,
         buf: &mut [u8; N],
     ) -> Result<(), SpiFlashError<SPI>> {
         // Read page
@@ -56,7 +53,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     /// Read a slice of a page
     pub fn read_page_slice_blocking(
         &mut self,
-        page_address: PageAddress,
+        page_address: PageIndex,
         column_address: ColumnAddress,
         buf: &mut [u8],
     ) -> Result<(), SpiFlashError<SPI>> {
@@ -69,7 +66,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     /// Write a page
     pub fn write_page_blocking(
         &mut self,
-        page_address: PageAddress,
+        page_address: PageIndex,
         buf: &[u8; N],
     ) -> Result<(), SpiFlashError<SPI>> {
         // Write page
@@ -79,7 +76,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     /// Write a slice of a page
     pub fn write_page_slice_blocking(
         &mut self,
-        page_address: PageAddress,
+        page_address: PageIndex,
         column_address: ColumnAddress,
         buf: &[u8],
     ) -> Result<(), SpiFlashError<SPI>> {
@@ -89,11 +86,8 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     }
 
     /// Mark a block as bad
-    pub fn mark_block_bad_blocking(
-        &mut self,
-        block_address: BlockAddress,
-    ) -> Result<(), SpiFlashError<SPI>> {
-        self.device.mark_block_bad(&mut self.spi, block_address)
+    pub fn mark_block_bad_blocking(&mut self, block: BlockIndex) -> Result<(), SpiFlashError<SPI>> {
+        self.device.mark_block_bad(&mut self.spi, block)
     }
 }
 
@@ -145,7 +139,7 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: 
     /// Read a page into the device buffer/register
     pub async fn page_read(
         &mut self,
-        address: PageAddress,
+        address: PageIndex,
     ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.page_read(&mut self.spi, address).await?;
         self.wait_ready().await?;
@@ -186,7 +180,7 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: 
     /// Checks erase failed flag
     pub async fn erase_block(
         &mut self,
-        page_address: PageAddress,
+        page_address: PageIndex,
     ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device.erase_block(&mut self.spi, page_address).await?;
         self.wait_ready().await?;
@@ -234,7 +228,7 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: 
     /// Write buffer to page, wait until completes, check for program failure
     pub async fn program_execute(
         &mut self,
-        page_address: PageAddress,
+        page_address: PageIndex,
     ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.device
             .program_execute(&mut self.spi, page_address)
@@ -251,21 +245,21 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: 
     /// This will read the page into the device buffer/register and then read it to the buffer
     pub async fn read_page(
         &mut self,
-        address: PageAddress,
+        address: PageIndex,
         buf: &mut [u8; N],
     ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
         self.page_read(address).await?;
-        self.page_read_buffer(ColumnAddress(0), buf).await
+        self.page_read_buffer(ColumnAddress::new(0), buf).await
     }
 
     /// Write a whole page to the device
     /// This will write the page to the buffer/register and then write it to the page
     pub async fn write_page(
         &mut self,
-        address: PageAddress,
+        address: PageIndex,
         buf: &[u8; N],
     ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.program_load(ColumnAddress(0), buf).await?;
+        self.program_load(ColumnAddress::new(0), buf).await?;
         self.program_execute(address).await
     }
 
@@ -308,9 +302,9 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
     const PAGES_PER_BLOCK: usize = D::PAGES_PER_BLOCK as usize;
 
     fn read(&mut self, offset: u32, mut bytes: &mut [u8]) -> Result<(), Self::Error> {
-        let ba = ByteAddress(offset);
+        let ba = ByteAddress::new(offset);
         let ca = ba.as_column_address(D::PAGE_SIZE);
-        let mut pa = ba.as_page_address(D::PAGE_SIZE);
+        let mut pa = ba.as_page_index(D::PAGE_SIZE);
         // if ca.0 != 0 {
         //     // Not aligned to page
         //     // Read rest of page (or requested bytes)
@@ -336,11 +330,8 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
         D::CAPACITY
     }
 
-    fn block_status(&mut self, block: u16) -> Result<BlockStatus, Self::Error> {
-        if self
-            .device
-            .block_marked_bad(&mut self.spi, BlockAddress(block as u32))?
-        {
+    fn block_status(&mut self, block: BlockIndex) -> Result<BlockStatus, Self::Error> {
+        if self.device.block_marked_bad(&mut self.spi, block)? {
             Ok(BlockStatus::Failed)
         } else {
             Ok(BlockStatus::Ok)
@@ -350,8 +341,8 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
 
     fn erase(&mut self, mut offset: u32, length: u32) -> Result<(), Self::Error> {
         loop {
-            let pa = ByteAddress(offset).as_block_address(D::BLOCK_SIZE);
-            self.erase_block_blocking(pa)?;
+            let block = ByteAddress::new(offset).as_block_index(D::BLOCK_SIZE);
+            self.erase_block_blocking(block)?;
 
             offset += D::BLOCK_SIZE;
             if offset >= length {
@@ -363,14 +354,14 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
 
     fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
         for chunk in bytes.chunks(D::PAGE_SIZE as usize) {
-            let pa = ByteAddress(offset).as_page_address(D::PAGE_SIZE);
+            let pa = ByteAddress::new(offset).as_page_index(D::PAGE_SIZE);
             // self.program_load_blocking(0.into(), chunk)?;
             // self.program_execute_blocking(pa)?;
         }
         Ok(())
     }
 
-    fn erase_block(&mut self, block: u16) -> Result<(), Self::Error> {
+    fn erase_block(&mut self, block: BlockIndex) -> Result<(), Self::Error> {
         todo!()
     }
 
@@ -378,7 +369,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
         todo!()
     }
 
-    fn mark_block_bad(&mut self, block: u16) -> Result<(), Self::Error> {
+    fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error> {
         todo!()
     }
 }

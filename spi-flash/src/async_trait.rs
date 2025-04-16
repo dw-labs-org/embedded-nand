@@ -1,5 +1,5 @@
 use embedded_hal_async::spi::{Operation, SpiDevice};
-use embedded_nand::{ColumnAddress, PageAddress};
+use embedded_nand::{ColumnAddress, PageIndex};
 use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
 
 use crate::{ECCStatus, JedecID, SpiNand};
@@ -67,9 +67,9 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     async fn page_read(
         &self,
         spi: &mut SPI,
-        address: PageAddress,
+        address: PageIndex,
     ) -> Result<(), SpiFlashErrorASync<SPI>> {
-        let pa = address.0;
+        let pa = address.as_u32();
         let buf = [
             Self::PAGE_READ_COMMAND,
             (pa >> 16) as u8,
@@ -86,15 +86,11 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         ca: ColumnAddress,
         buf: &mut [u8],
     ) -> Result<(), SpiFlashErrorASync<SPI>> {
+        let ca = ca.as_u16();
         spi_transaction(
             spi,
             &mut [
-                Operation::Write(&[
-                    Self::PAGE_READ_BUFFER_COMMAND,
-                    (ca.0 >> 8) as u8,
-                    ca.0 as u8,
-                    0,
-                ]),
+                Operation::Write(&[Self::PAGE_READ_BUFFER_COMMAND, (ca >> 8) as u8, ca as u8, 0]),
                 Operation::Read(buf),
             ],
         )
@@ -116,13 +112,13 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     async fn block_marked_bad(
         &self,
         spi: &mut SPI,
-        address: PageAddress,
+        address: PageIndex,
     ) -> Result<bool, SpiFlashErrorASync<SPI>> {
         // Read page into the buffer
         self.page_read(spi, address).await?;
         // Read the first byte of the extra data
         let mut buf = [0; 1];
-        self.page_read_buffer(spi, ColumnAddress(Self::PAGE_SIZE as u16), &mut buf)
+        self.page_read_buffer(spi, ColumnAddress::new(Self::PAGE_SIZE as u16), &mut buf)
             .await?;
         Ok(buf[0] != 0xFF)
     }
@@ -172,9 +168,9 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     async fn erase_block(
         &self,
         spi: &mut SPI,
-        page_address: PageAddress,
+        page_address: PageIndex,
     ) -> Result<(), SpiFlashErrorASync<SPI>> {
-        let address = page_address.0;
+        let address = page_address.as_u32();
         // Enable writing first
         self.write_enable(spi).await?;
         spi_write(
@@ -205,7 +201,8 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         ca: ColumnAddress,
         buf: &[u8],
     ) -> Result<(), SpiFlashErrorASync<SPI>> {
-        let data = [Self::PROGRAM_LOAD_COMMAND, (ca.0 >> 8) as u8, ca.0 as u8];
+        let ca = ca.as_u16();
+        let data = [Self::PROGRAM_LOAD_COMMAND, (ca >> 8) as u8, ca as u8];
         spi_transaction(spi, &mut [Operation::Write(&data), Operation::Write(buf)]).await
     }
 
@@ -222,11 +219,8 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         ca: ColumnAddress,
         buf: &[u8],
     ) -> Result<(), SpiFlashErrorASync<SPI>> {
-        let data = [
-            Self::PROGRAM_RANDOM_LOAD_COMMAND,
-            (ca.0 >> 8) as u8,
-            ca.0 as u8,
-        ];
+        let ca = ca.as_u16();
+        let data = [Self::PROGRAM_RANDOM_LOAD_COMMAND, (ca >> 8) as u8, ca as u8];
         spi_transaction(spi, &mut [Operation::Write(&data), Operation::Write(buf)]).await
     }
 
@@ -240,9 +234,9 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     async fn program_execute(
         &self,
         spi: &mut SPI,
-        address: PageAddress,
+        address: PageIndex,
     ) -> Result<(), SpiFlashErrorASync<SPI>> {
-        let pa = address.0;
+        let pa = address.as_u32();
         let data = [
             Self::PROGRAM_EXECUTE_COMMAND,
             (pa >> 16) as u8,

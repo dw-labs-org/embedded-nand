@@ -1,5 +1,5 @@
 use embedded_hal::spi::{Operation, SpiDevice};
-use embedded_nand::{BlockAddress, ColumnAddress, PageAddress};
+use embedded_nand::{BlockIndex, ColumnAddress, PageIndex};
 use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
 
 use crate::{ECCStatus, JedecID, SpiNand};
@@ -69,8 +69,8 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     }
 
     /// Read a page into the device buffer/register
-    fn page_read_cmd(&self, spi: &mut SPI, address: PageAddress) -> Result<(), SpiFlashError<SPI>> {
-        let pa = address.0;
+    fn page_read_cmd(&self, spi: &mut SPI, address: PageIndex) -> Result<(), SpiFlashError<SPI>> {
+        let pa = address.as_u32();
         let buf = [
             Self::PAGE_READ_COMMAND,
             (pa >> 16) as u8,
@@ -87,15 +87,11 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         ca: ColumnAddress,
         buf: &mut [u8],
     ) -> Result<(), SpiFlashError<SPI>> {
+        let ca = ca.as_u16();
         spi_transaction(
             spi,
             &mut [
-                Operation::Write(&[
-                    Self::PAGE_READ_BUFFER_COMMAND,
-                    (ca.0 >> 8) as u8,
-                    ca.0 as u8,
-                    0,
-                ]),
+                Operation::Write(&[Self::PAGE_READ_BUFFER_COMMAND, (ca >> 8) as u8, ca as u8, 0]),
                 Operation::Read(buf),
             ],
         )
@@ -125,9 +121,9 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     fn erase_block_cmd(
         &self,
         spi: &mut SPI,
-        block_address: BlockAddress,
+        block_address: BlockIndex,
     ) -> Result<(), SpiFlashError<SPI>> {
-        let address = PageAddress::from_block_address(block_address, Self::PAGES_PER_BLOCK).0;
+        let address = PageIndex::from_block_address(block_address, Self::PAGES_PER_BLOCK).as_u32();
         spi_write(
             spi,
             &[
@@ -155,7 +151,8 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         ca: ColumnAddress,
         buf: &[u8],
     ) -> Result<(), SpiFlashError<SPI>> {
-        let data = [Self::PROGRAM_LOAD_COMMAND, (ca.0 >> 8) as u8, ca.0 as u8];
+        let ca = ca.as_u16();
+        let data = [Self::PROGRAM_LOAD_COMMAND, (ca >> 8) as u8, ca as u8];
         spi_transaction(spi, &mut [Operation::Write(&data), Operation::Write(buf)])
     }
 
@@ -172,11 +169,8 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         ca: ColumnAddress,
         buf: &[u8],
     ) -> Result<(), SpiFlashError<SPI>> {
-        let data = [
-            Self::PROGRAM_RANDOM_LOAD_COMMAND,
-            (ca.0 >> 8) as u8,
-            ca.0 as u8,
-        ];
+        let ca = ca.as_u16();
+        let data = [Self::PROGRAM_RANDOM_LOAD_COMMAND, (ca >> 8) as u8, ca as u8];
         spi_transaction(spi, &mut [Operation::Write(&data), Operation::Write(buf)])
     }
 
@@ -190,9 +184,9 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     fn program_execute_cmd(
         &self,
         spi: &mut SPI,
-        address: PageAddress,
+        address: PageIndex,
     ) -> Result<(), SpiFlashError<SPI>> {
-        let pa = address.0;
+        let pa = address.as_u32();
         let data = [
             Self::PROGRAM_EXECUTE_COMMAND,
             (pa >> 16) as u8,
@@ -258,14 +252,14 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     fn block_marked_bad(
         &self,
         spi: &mut SPI,
-        block_address: BlockAddress,
+        block_address: BlockIndex,
     ) -> Result<bool, SpiFlashError<SPI>> {
         // Read the first 2 bytes of the extra data
         let mut buf = [0; 2];
         self.read_page_slice(
             spi,
-            PageAddress::from_block_address(block_address, Self::PAGES_PER_BLOCK),
-            ColumnAddress(Self::PAGE_SIZE as u16),
+            PageIndex::from_block_address(block_address, Self::PAGES_PER_BLOCK),
+            ColumnAddress::new(Self::PAGE_SIZE as u16),
             &mut buf,
         )?;
         Ok(buf[0] != 0xFF || buf[1] != 0xFF)
@@ -278,13 +272,18 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     fn mark_block_bad(
         &self,
         spi: &mut SPI,
-        block_address: BlockAddress,
+        block_address: BlockIndex,
     ) -> Result<(), SpiFlashError<SPI>> {
-        let pa = PageAddress::from_block_address(block_address, Self::PAGES_PER_BLOCK);
+        let pa = PageIndex::from_block_address(block_address, Self::PAGES_PER_BLOCK);
         // Erase the block
         self.erase_block(spi, block_address)?;
         // Write to the 2nd byte in the extra data
-        self.write_page_slice(spi, pa, (Self::PAGE_SIZE as u16 + 1).into(), &[0])
+        self.write_page_slice(
+            spi,
+            pa,
+            ColumnAddress::new(Self::PAGE_SIZE as u16 + 1),
+            &[0],
+        )
     }
 
     // ============= RWE functions =============
@@ -292,7 +291,7 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     fn erase_block(
         &self,
         spi: &mut SPI,
-        block_address: BlockAddress,
+        block_address: BlockIndex,
     ) -> Result<(), SpiFlashError<SPI>> {
         // Enable writing
         self.write_enable_cmd(spi)?;
@@ -311,20 +310,20 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     fn read_page(
         &self,
         spi: &mut SPI,
-        page_address: PageAddress,
+        page_address: PageIndex,
         buf: &mut [u8; N],
     ) -> Result<(), SpiFlashError<SPI>> {
         // Read page into device buffer
         self.page_read_cmd(spi, page_address)?;
         // Read the page from the device buffer
-        self.page_read_buffer_cmd(spi, ColumnAddress(0), buf)
+        self.page_read_buffer_cmd(spi, ColumnAddress::new(0), buf)
     }
 
     /// Read a slice from a page
     fn read_page_slice(
         &self,
         spi: &mut SPI,
-        page_address: PageAddress,
+        page_address: PageIndex,
         column_address: ColumnAddress,
         buf: &mut [u8],
     ) -> Result<(), SpiFlashError<SPI>> {
@@ -342,13 +341,13 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     fn write_page(
         &self,
         spi: &mut SPI,
-        page_address: PageAddress,
+        page_address: PageIndex,
         buf: &[u8; N],
     ) -> Result<(), SpiFlashError<SPI>> {
         // Enable writing
         self.write_enable_cmd(spi)?;
         // Write to the device buffer
-        self.program_load_cmd(spi, 0.into(), buf)?;
+        self.program_load_cmd(spi, ColumnAddress::new(0), buf)?;
         // Write the buffer to the page
         self.program_execute_cmd(spi, page_address)?;
         // Wait for the write to complete
@@ -366,7 +365,7 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     fn write_page_slice(
         &self,
         spi: &mut SPI,
-        page_address: PageAddress,
+        page_address: PageIndex,
         column_address: ColumnAddress,
         buf: &[u8],
     ) -> Result<(), SpiFlashError<SPI>> {

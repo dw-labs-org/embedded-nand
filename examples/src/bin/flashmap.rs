@@ -8,7 +8,6 @@ use defmt::dbg;
 use embassy_executor::Spawner;
 use embassy_stm32::lptim::timer::Timer;
 use embassy_stm32::{can::BufferedCan, gpio::Output};
-use spi_flash::address::{BlockAddress, PageAddress};
 use spi_flash::blocking::SpiNandBlocking;
 use spi_flash::{
     SpiNand,
