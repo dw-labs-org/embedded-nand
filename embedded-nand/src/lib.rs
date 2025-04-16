@@ -1,8 +1,10 @@
 #![no_std]
 
-pub mod address;
+mod address;
+mod fmt;
 pub mod iter;
-pub use address::{BlockIndex, ByteAddress, ColumnAddress, PageIndex};
+pub mod test;
+pub use address::{AddressConversions, BlockIndex, ByteAddress, ColumnAddress, PageIndex};
 
 pub trait NandFlashError {
     /// Convert a specific NAND flash error into a generic error kind
@@ -176,7 +178,7 @@ pub fn check_write<T: NandFlash>(
     check_slice(flash, T::WRITE_SIZE, offset, length)
 }
 
-fn check_slice<T: NandFlash>(
+pub fn check_slice<T: NandFlash>(
     flash: &T,
     align: usize,
     offset: u32,

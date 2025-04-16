@@ -2,8 +2,9 @@ use core::fmt::Debug;
 
 use embedded_hal::spi::SpiDevice;
 use embedded_nand::{
-    BlockIndex, BlockStatus, ByteAddress, ColumnAddress, ErrorType, NandFlash, NandFlashError,
-    NandFlashErrorKind, PageIndex,
+    check_erase, check_read, check_slice, check_write, AddressConversions, BlockIndex, BlockStatus,
+    ByteAddress, ColumnAddress, ErrorType, NandFlash, NandFlashError, NandFlashErrorKind,
+    PageIndex,
 };
 
 use crate::{
@@ -40,7 +41,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         self.device.erase_block(&mut self.spi, block)
     }
     /// Read a page
-    pub fn page_read_blocking(
+    pub fn read_page_blocking(
         &mut self,
         page_address: PageIndex,
         buf: &mut [u8; N],
@@ -83,6 +84,26 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         // Write page
         self.device
             .write_page_slice(&mut self.spi, page_address, column_address, buf)
+    }
+
+    /// Copy a page to another using the device buffer
+    pub fn copy_page_blocking(
+        &mut self,
+        src_page_address: PageIndex,
+        dest_page_address: PageIndex,
+    ) -> Result<(), SpiFlashError<SPI>> {
+        // Load the page into the device buffer
+        self.device.page_read_cmd(&mut self.spi, src_page_address)?;
+        // Write the page to the destination address
+        self.device
+            .program_execute_cmd(&mut self.spi, dest_page_address)?;
+        // Wait until the device is ready
+        while self.device.is_busy(&mut self.spi)? {}
+        // Return the status of the operation
+        if self.device.program_failed(&mut self.spi)? {
+            return Err(SpiFlashError::ProgramFailed);
+        }
+        Ok(())
     }
 
     /// Mark a block as bad
@@ -290,7 +311,15 @@ impl<SPI: SpiDevice, D, const N: usize> ErrorType for SpiFlash<SPI, D, N> {
 
 impl<SPI: SpiDevice> NandFlashError for SpiFlashError<SPI> {
     fn kind(&self) -> NandFlashErrorKind {
-        todo!()
+        match self {
+            SpiFlashError::NotAligned => NandFlashErrorKind::NotAligned,
+            SpiFlashError::OutOfBounds => NandFlashErrorKind::OutOfBounds,
+            SpiFlashError::SPI(_) => NandFlashErrorKind::Other,
+            SpiFlashError::EraseFailed => NandFlashErrorKind::BlockFail(None),
+            SpiFlashError::ProgramFailed => NandFlashErrorKind::BlockFail(None),
+            SpiFlashError::ReadFailed => NandFlashErrorKind::BlockFail(None),
+            SpiFlashError::Other => NandFlashErrorKind::Other,
+        }
     }
 }
 
@@ -300,29 +329,42 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
     const BLOCK_COUNT: usize = D::BLOCK_COUNT as usize;
     const ERASE_SIZE: usize = D::BLOCK_SIZE as usize;
     const PAGES_PER_BLOCK: usize = D::PAGES_PER_BLOCK as usize;
+    const WRITE_SIZE: usize = D::PAGE_SIZE as usize;
 
     fn read(&mut self, offset: u32, mut bytes: &mut [u8]) -> Result<(), Self::Error> {
+        // Check that the requested read is aligned and within bounds
+        check_read(self, offset, bytes.len())?;
+
+        // Check if the first page is whole
         let ba = ByteAddress::new(offset);
         let ca = ba.as_column_address(D::PAGE_SIZE);
         let mut pa = ba.as_page_index(D::PAGE_SIZE);
-        // if ca.0 != 0 {
-        //     // Not aligned to page
-        //     // Read rest of page (or requested bytes)
-        //     self.page_read_blocking(pa)?;
-        //     // check if single read is enough
-        //     let end = D::PAGE_SIZE as usize - ca.0 as usize;
-        //     if end >= bytes.len() {
-        //         return self.page_read_buffer_blocking(ca, bytes);
-        //     }
-        //     self.page_read_buffer_blocking(ca, &mut bytes[0..end])?;
-        //     bytes = &mut bytes[end..];
-        // }
+        if ca.as_u16() != 0 {
+            // Not aligned to page
+            // number of bytes in rest of page
+            let remaining = D::PAGE_SIZE as usize - ca.as_u16() as usize;
+            // number of bytes to read
+            let read_len = if bytes.len() > remaining {
+                remaining
+            } else {
+                bytes.len()
+            };
+            // read first page into buffer
+            self.read_page_slice_blocking(pa, ca, bytes[..read_len].as_mut())?;
+            // remove first non full page from bytes
+            bytes = &mut bytes[read_len..];
+            // increment page address
+            pa.inc();
+        }
 
-        // for chunk in bytes.chunks_mut(D::PAGE_SIZE as usize) {
-        //     self.page_read_blocking(pa)?;
-        //     self.page_read_buffer_blocking(0.into(), chunk)?;
-        //     pa.0 += 1;
-        // }
+        // read full pages.
+        // If already read all bytes, 0 iterations
+        for chunk in bytes.chunks_mut(D::PAGE_SIZE as usize) {
+            // read page into buffer
+            self.read_page_slice_blocking(pa, ColumnAddress::new(0), chunk)?;
+            // increment page address
+            pa.inc();
+        }
         Ok(())
     }
 
@@ -337,39 +379,91 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
             Ok(BlockStatus::Ok)
         }
     }
-    const WRITE_SIZE: usize = D::PAGE_SIZE as usize;
 
-    fn erase(&mut self, mut offset: u32, length: u32) -> Result<(), Self::Error> {
-        loop {
-            let block = ByteAddress::new(offset).as_block_index(D::BLOCK_SIZE);
-            self.erase_block_blocking(block)?;
+    fn erase(&mut self, offset: u32, length: u32) -> Result<(), Self::Error> {
+        // Check that the requested erase is aligned and within bounds
+        check_erase(self, offset, offset + length)?;
 
-            offset += D::BLOCK_SIZE;
-            if offset >= length {
-                break;
-            }
+        let start_block = Self::raw_byte_to_block_index(offset);
+        let end_block = Self::raw_byte_to_block_index(offset + length);
+
+        // Be nice to use an iterator here, but custom range is nightly only
+        for block in (start_block.as_u16())..(end_block.as_u16()) {
+            self.erase_block(BlockIndex::new(block))?;
         }
         Ok(())
     }
 
-    fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+    fn write(&mut self, offset: u32, mut bytes: &[u8]) -> Result<(), Self::Error> {
+        // Check that the requested write is aligned and within bounds
+        check_write(self, offset, bytes.len())?;
+
+        // Check if the first page is whole
+        let ba = ByteAddress::new(offset);
+        let ca = ba.as_column_address(D::PAGE_SIZE);
+        let mut pa = ba.as_page_index(D::PAGE_SIZE);
+        if ca.as_u16() != 0 {
+            // Not aligned to page
+            // number of bytes in rest of page
+            let remaining = D::PAGE_SIZE as usize - ca.as_u16() as usize;
+            // number of bytes to read
+            let read_len = if bytes.len() > remaining {
+                remaining
+            } else {
+                bytes.len()
+            };
+            // write first page into buffer
+            self.write_page_slice_blocking(pa, ca, &bytes[..read_len])?;
+            // remove first non full page from bytes
+            bytes = &bytes[read_len..];
+            // increment page address
+            pa.inc();
+        }
+
+        // Write the remaining full and final partial/full page
         for chunk in bytes.chunks(D::PAGE_SIZE as usize) {
-            let pa = ByteAddress::new(offset).as_page_index(D::PAGE_SIZE);
-            // self.program_load_blocking(0.into(), chunk)?;
-            // self.program_execute_blocking(pa)?;
+            // write page into buffer
+            self.write_page_slice_blocking(pa, ColumnAddress::new(0), chunk)?;
+            // increment page address
+            pa.inc();
         }
         Ok(())
     }
 
     fn erase_block(&mut self, block: BlockIndex) -> Result<(), Self::Error> {
-        todo!()
+        // check range
+        if block.as_u16() >= Self::BLOCK_COUNT as u16 {
+            return Err(SpiFlashError::OutOfBounds);
+        }
+        // erase
+        self.erase_block_blocking(block)
     }
 
     fn copy(&mut self, src_offset: u32, dest_offset: u32, length: u32) -> Result<(), Self::Error> {
-        todo!()
+        // Check that both read and write are aligned with pages and within bounds
+        check_slice(self, Self::PAGE_SIZE, src_offset, length as usize)?;
+        check_slice(self, Self::PAGE_SIZE, dest_offset, length as usize)?;
+
+        // Iterate over pages
+        let n_pages = length / Self::PAGE_SIZE as u32;
+        let mut src_page = Self::byte_to_page_index(ByteAddress::new(src_offset));
+        let mut dest_page = Self::byte_to_page_index(ByteAddress::new(dest_offset));
+        for _ in 0..n_pages {
+            // Copy the page
+            self.copy_page_blocking(src_page, dest_page)?;
+            // Increment the page addresses
+            src_page.inc();
+            dest_page.inc();
+        }
+        Ok(())
     }
 
     fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error> {
-        todo!()
+        // check range
+        if block.as_u16() >= Self::BLOCK_COUNT as u16 {
+            return Err(SpiFlashError::OutOfBounds);
+        }
+        // mark bad
+        self.mark_block_bad_blocking(block)
     }
 }

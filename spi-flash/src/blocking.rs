@@ -1,5 +1,5 @@
 use embedded_hal::spi::{Operation, SpiDevice};
-use embedded_nand::{BlockIndex, ColumnAddress, PageIndex};
+use embedded_nand::{BlockIndex, ColumnAddress, NandFlashErrorKind, PageIndex};
 use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
 
 use crate::{ECCStatus, JedecID, SpiNand};
@@ -18,6 +18,23 @@ pub enum SpiFlashError<SPI: SpiDevice> {
     /// Read failed
     /// This can happen due to an ECC error
     ReadFailed,
+    /// Requested bytes out of bounds
+    OutOfBounds,
+    /// Requested bytes not aligned
+    NotAligned,
+    /// Other error
+    Other,
+}
+
+// This impl is only for the helper check bounds / alignment function for auto conversion
+impl<SPI: SpiDevice> From<NandFlashErrorKind> for SpiFlashError<SPI> {
+    fn from(kind: NandFlashErrorKind) -> Self {
+        match kind {
+            NandFlashErrorKind::NotAligned => SpiFlashError::NotAligned,
+            NandFlashErrorKind::OutOfBounds => SpiFlashError::OutOfBounds,
+            _ => SpiFlashError::Other,
+        }
+    }
 }
 
 /// Blocking SPI NAND flash trait

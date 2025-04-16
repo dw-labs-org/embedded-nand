@@ -5,7 +5,7 @@ use core::ops::Range;
 use embedded_nand::{BlockIndex, ByteAddress, NandFlashError};
 use thiserror::Error;
 mod fmt;
-use embedded_nand::address::AddressConversions;
+use embedded_nand::AddressConversions;
 
 /// Magic bytes at the start of the flashmap
 const MAGIC: [u8; 4] = *b"FMAP";
@@ -125,8 +125,9 @@ where
                         .map_err(|e| Error::Flash(e))?
                     {
                         debug!(
-                            "Found valid map at {:#X} with {} writes",
-                            address, new_header.write_count
+                            "Found valid map at {} with {} writes",
+                            address.as_u32(),
+                            new_header.write_count
                         );
                         // Check if it is more recent than the current one
                         if let Some((current_header, _)) = valid_header {
@@ -152,8 +153,9 @@ where
             flashmap.data_address = address;
             flashmap.load_map_array()?;
             info!(
-                "Loaded map from {:#X} with {} writes",
-                address, flashmap.data.header.write_count
+                "Loaded map from {} with {} writes",
+                address.as_u32(),
+                flashmap.data.header.write_count
             );
             return Ok(flashmap);
         }
@@ -182,7 +184,7 @@ where
                     break;
                 }
             } else {
-                warn!("Block {} is bad", block_ind);
+                warn!("Block {} is bad", block_ind.as_u16());
             }
         }
 
@@ -192,7 +194,7 @@ where
         } else if let Some(next) = final_block {
             // Set the next block to use
             flashmap.data.header.final_block = next;
-            info!("Next block to use: {}", next);
+            info!("Next block to use: {}", next.as_u16());
         } else {
             warn!("No valid blocks remaining");
             flashmap.data.header.final_block = BlockIndex::new(0);
