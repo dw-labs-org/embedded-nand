@@ -1,15 +1,17 @@
 use core::fmt::Debug;
 
 use embedded_hal::spi::SpiDevice;
-use embedded_nand::{BlockStatus, ErrorType, NandFlash, NandFlashError, NandFlashErrorKind};
+use embedded_nand::{
+    BlockAddress, BlockStatus, ByteAddress, ColumnAddress, ErrorType, NandFlash, NandFlashError,
+    NandFlashErrorKind, PageAddress,
+};
 
 use crate::{
-    address::{BlockAddress, ByteAddress, PageAddress},
     async_trait::SpiNandAsync,
     blocking::{SpiFlashError, SpiNandBlocking},
 };
 
-use super::{address::ColumnAddress, JedecID};
+use super::JedecID;
 
 #[derive(Debug, defmt::Format)]
 pub struct SpiFlash<SPI, D, const N: usize> {

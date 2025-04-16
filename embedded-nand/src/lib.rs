@@ -1,6 +1,9 @@
 #![no_std]
 
+mod address;
 pub mod iter;
+pub use address::{BlockAddress, ByteAddress, ColumnAddress, PageAddress};
+
 pub trait NandFlashError {
     /// Convert a specific NAND flash error into a generic error kind
     fn kind(&self) -> NandFlashErrorKind;

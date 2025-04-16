@@ -529,6 +529,7 @@ dependencies = [
  "embassy-sync",
  "embassy-time",
  "embedded-hal-bus",
+ "embedded-nand",
  "flashmap",
  "panic-probe",
  "spi-flash",

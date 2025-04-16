@@ -1,8 +1,8 @@
-use address::{ColumnAddress, PageAddress};
 use embedded_hal_async::spi::{Operation, SpiDevice};
+use embedded_nand::{ColumnAddress, PageAddress};
 use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
 
-use crate::{address, ECCStatus, JedecID, SpiNand};
+use crate::{ECCStatus, JedecID, SpiNand};
 
 // #[cfg(target_feature = "defmt")]
 #[derive(defmt::Format)]
