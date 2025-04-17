@@ -45,6 +45,17 @@ impl From<PageIndex> for u32 {
     }
 }
 
+impl From<&[u8; 3]> for PageIndex {
+    fn from(bytes: &[u8; 3]) -> Self {
+        let mut index = 0;
+        for i in 0..3 {
+            index <<= 8;
+            index |= bytes[i] as u32;
+        }
+        PageIndex(index)
+    }
+}
+
 impl Display for PageIndex {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         self.0.fmt(f)
