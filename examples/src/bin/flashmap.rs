@@ -86,5 +86,8 @@ async fn main(spawner: Spawner) {
     dbg!(flash.disable_block_protection().await);
 
     // initialise the flashmap with 2000 logical blocks (46 spare, 2 for map)
-    let mut flashmap = flashmap::FlashMap::<_, 2000>::init(flash).unwrap_or_else(|_| panic!());
+    let mut flashmap = flashmap::FlashMap::<_, 2000>::init(flash).unwrap_or_else(|e| {
+        defmt::error!("Failed to initialise flashmap: {:?}", e);
+        panic!()
+    });
 }

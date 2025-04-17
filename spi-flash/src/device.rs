@@ -329,9 +329,10 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
     const BLOCK_COUNT: usize = D::BLOCK_COUNT as usize;
     const ERASE_SIZE: usize = D::BLOCK_SIZE as usize;
     const PAGES_PER_BLOCK: usize = D::PAGES_PER_BLOCK as usize;
-    const WRITE_SIZE: usize = D::PAGE_SIZE as usize;
+    const WRITE_SIZE: usize = 1;
 
     fn read(&mut self, offset: u32, mut bytes: &mut [u8]) -> Result<(), Self::Error> {
+        trace!("Reading {} bytes from offset {}", bytes.len(), offset);
         // Check that the requested read is aligned and within bounds
         check_read(self, offset, bytes.len())?;
 
@@ -349,6 +350,12 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
             } else {
                 bytes.len()
             };
+            trace!(
+                "Partial read {} bytes from page {} column {}",
+                read_len,
+                pa.as_u32(),
+                ca.as_u16()
+            );
             // read first page into buffer
             self.read_page_slice_blocking(pa, ca, bytes[..read_len].as_mut())?;
             // remove first non full page from bytes
@@ -381,6 +388,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
     }
 
     fn erase(&mut self, offset: u32, length: u32) -> Result<(), Self::Error> {
+        trace!("Erasing {} bytes from offset {}", length, offset);
         // Check that the requested erase is aligned and within bounds
         check_erase(self, offset, offset + length)?;
 
@@ -395,6 +403,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
     }
 
     fn write(&mut self, offset: u32, mut bytes: &[u8]) -> Result<(), Self::Error> {
+        trace!("Writing {} bytes to offset {}", bytes.len(), offset);
         // Check that the requested write is aligned and within bounds
         check_write(self, offset, bytes.len())?;
 
@@ -431,6 +440,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
     }
 
     fn erase_block(&mut self, block: BlockIndex) -> Result<(), Self::Error> {
+        trace!("Erasing block {}", block.as_u16());
         // check range
         if block.as_u16() >= Self::BLOCK_COUNT as u16 {
             return Err(SpiFlashError::OutOfBounds);
@@ -459,6 +469,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for S
     }
 
     fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error> {
+        debug!("Marking block {} as bad", block.as_u16());
         // check range
         if block.as_u16() >= Self::BLOCK_COUNT as u16 {
             return Err(SpiFlashError::OutOfBounds);

@@ -13,6 +13,7 @@ const MAGIC: [u8; 4] = *b"FMAP";
 const VERSION: u16 = 1;
 
 #[derive(Debug, Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error<F: embedded_nand::NandFlash> {
     #[error("Flash")]
     Flash(F::Error),
@@ -107,6 +108,11 @@ where
         let mut valid_header = None;
         // Go through first 2 valid blocks to try find a map
         for (block_ind, block_address) in flashmap.flash.block_iter(BlockIndex::new(0)) {
+            debug!(
+                "Checking block {} at {} for map",
+                block_ind.as_u16(),
+                block_address.as_u32()
+            );
             // check if block is good
             if !flashmap
                 .flash
@@ -162,6 +168,7 @@ where
         // No valid map found, create a new one
         info!("No valid map found, creating new one");
         let first_block = map_blocks[1] + 1;
+        debug!("First block to use: {}", first_block.as_u16());
 
         // Iterate over the blocks to find LBC good blocks
         let mut logical_ind = 0;
@@ -180,7 +187,7 @@ where
                 if logical_ind >= LBC {
                     // We have enough blocks, so break out of the loop
                     final_block = Some(block_ind);
-                    flashmap.data_address = block_address;
+
                     break;
                 }
             } else {
@@ -190,6 +197,7 @@ where
 
         // check that we got at least LBC blocks
         if logical_ind < LBC {
+            error!("Not enough valid blocks found");
             return Err(Error::NotEnoughValidBlocks);
         } else if let Some(next) = final_block {
             // Set the next block to use
@@ -202,7 +210,9 @@ where
         // Save the map config
         flashmap.data.header.map_blocks = map_blocks;
         flashmap.data.header.write_count = 1;
+        flashmap.data_address = Self::block_to_byte_address(map_blocks[0]);
         // erase the block that will be used for the map
+        debug!("Erasing block {} for map", map_blocks[0].as_u16());
         flashmap
             .flash
             .erase_block(map_blocks[0])
@@ -348,6 +358,7 @@ where
     ///
     /// Includes the map data, map array and terminator.
     fn write_map(&mut self) -> Result<(), Error<F>> {
+        trace!("Writing map to {}", self.data_address);
         // Cast the data structure to a byte array
         let slice = unsafe {
             core::slice::from_raw_parts_mut(
