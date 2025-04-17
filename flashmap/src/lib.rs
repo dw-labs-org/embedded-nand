@@ -129,7 +129,7 @@ where
         let mut map_blocks = [BlockIndex::default(); 2];
         let mut valid_header = None;
         // Go through first 2 valid blocks to try find a map
-        for (block_ind, block_address) in F::block_iter_from(BlockIndex::new(0)) {
+        for (block_ind, block_address) in flashmap.flash.block_iter_from(BlockIndex::new(0)) {
             debug!(
                 "Checking block {} at {} for map",
                 block_ind.as_u16(),
@@ -195,7 +195,7 @@ where
         // Iterate over the blocks to find LBC good blocks
         let mut logical_ind = 0;
         let mut final_block = None;
-        for (block_ind, _) in F::block_iter_from(first_block) {
+        for (block_ind, _) in flashmap.flash.block_iter_from(first_block) {
             // Check if the block is good
             if !flashmap
                 .flash
@@ -612,7 +612,7 @@ where
 
     fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
         // check alignment
-        for (block, _) in Self::block_iter_range(
+        for (block, _) in self.block_iter_range(
             Self::byte_to_block_index(ByteAddress::new(from)),
             Self::byte_to_block_index(ByteAddress::new(to)),
         ) {

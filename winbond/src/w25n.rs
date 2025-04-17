@@ -1,12 +1,15 @@
 use embedded_hal::spi::SpiDevice;
 use spi_flash::{
     async_trait::{SpiFlashErrorASync, SpiNandAsync},
-    blocking::{utils::spi_transfer, SpiFlashError, SpiNandBlocking},
+    blocking::{utils::spi_transfer, SpiNandBlocking},
+    error::SpiFlashError,
     JedecID, SpiNand,
 };
 
 /// Concrete type that implements all the flash device features
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct W25N<const B: u32>();
 
 // /// Alias for [SpiFlash] that uses [W25NDevice]

@@ -4,6 +4,7 @@ pub(crate) mod fmt;
 pub mod async_trait;
 pub mod blocking;
 pub mod device;
+pub mod error;
 
 /// Core trait that a NAND flash device must implement.
 ///

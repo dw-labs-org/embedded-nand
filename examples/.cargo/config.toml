@@ -16,5 +16,5 @@ target = "thumbv8m.main-none-eabi"
 target-dir = "target"
 
 [env]
-DEFMT_LOG = "debug"
+DEFMT_LOG = "trace"
 EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "16384"

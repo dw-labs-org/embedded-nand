@@ -4,14 +4,12 @@
 use cortex_m_semihosting::debug;
 use defmt::dbg;
 use embassy_executor::Spawner;
-use embedded_nand::NandFlash;
+use embedded_nand::{NandFlash, NandFlashIter};
 
 use embassy_stm32::gpio::Output;
 
-use spi_flash::{
-    SpiNand,
-    device::{self, SpiFlash},
-};
+use flashmap::FlashMap;
+use spi_flash::SpiNand;
 use winbond::w25n::W25N02K;
 use {defmt_rtt as _, panic_probe as _}; // global logger
 
@@ -78,7 +76,6 @@ async fn main(spawner: Spawner) {
     let b = <W25N02K as SpiNand<2048>>::BLOCK_COUNT;
 
     let mut flash = spi_flash::device::SpiFlash::new(spi_dev, device);
-    flash = dbg!(flash);
 
     // Read the JEDEC ID
     dbg!(flash.reset_blocking());
@@ -89,6 +86,9 @@ async fn main(spawner: Spawner) {
     let mut flashmap = flashmap::FlashMap::<_, 2000>::init(flash).unwrap();
 
     // Read the first page
-    let mut page = [0; 2048];
-    flashmap.read(0, &mut page).unwrap();
+    let mut buf = [0; 2048];
+    for (page, byte) in flashmap.page_iter() {
+        defmt::info!("Page: {}, byte {}", page, byte);
+        flashmap.read(byte.as_u32(), &mut buf).unwrap();
+    }
 }

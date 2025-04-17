@@ -7,10 +7,7 @@ use embedded_nand::{
     PageIndex,
 };
 
-use crate::{
-    async_trait::SpiNandAsync,
-    blocking::{SpiFlashError, SpiNandBlocking},
-};
+use crate::{async_trait::SpiNandAsync, blocking::SpiNandBlocking, error::SpiFlashError};
 
 use super::JedecID;
 

@@ -68,46 +68,46 @@ impl Iterator for PageIter {
 
 pub trait NandFlashIter {
     /// Iterate over a range of block indices
-    fn block_iter_range(start: BlockIndex, end: BlockIndex) -> BlockIter;
+    fn block_iter_range(&self, start: BlockIndex, end: BlockIndex) -> BlockIter;
     /// Iterate over a range of page indices
-    fn page_iter_range(start: PageIndex, end: PageIndex) -> PageIter;
+    fn page_iter_range(&self, start: PageIndex, end: PageIndex) -> PageIter;
     /// Iterate over all blocks
-    fn block_iter() -> BlockIter;
+    fn block_iter(&self) -> BlockIter;
     /// Iterate over all pages
-    fn page_iter() -> PageIter;
+    fn page_iter(&self) -> PageIter;
     /// Iterate over blocks starting from a specific block
-    fn block_iter_from(start: BlockIndex) -> BlockIter;
+    fn block_iter_from(&self, start: BlockIndex) -> BlockIter;
     /// Iterate over pages starting from a specific page
-    fn page_iter_from(start: PageIndex) -> PageIter;
+    fn page_iter_from(&self, start: PageIndex) -> PageIter;
 }
 
 impl<T: NandFlash> NandFlashIter for T {
-    fn block_iter_range(start: BlockIndex, end: BlockIndex) -> BlockIter {
+    fn block_iter_range(&self, start: BlockIndex, end: BlockIndex) -> BlockIter {
         let block_size = Self::ERASE_SIZE as u32;
         BlockIter::new(start, end, block_size)
     }
 
-    fn page_iter_range(start: PageIndex, end: PageIndex) -> PageIter {
+    fn page_iter_range(&self, start: PageIndex, end: PageIndex) -> PageIter {
         let page_size = Self::PAGE_SIZE as u32;
         PageIter::new(start, end, page_size)
     }
 
-    fn block_iter() -> BlockIter {
-        Self::block_iter_range(BlockIndex(0), BlockIndex(Self::BLOCK_COUNT as u16))
+    fn block_iter(&self) -> BlockIter {
+        self.block_iter_range(BlockIndex(0), BlockIndex(Self::BLOCK_COUNT as u16))
     }
 
-    fn page_iter() -> PageIter {
-        Self::page_iter_range(
+    fn page_iter(&self) -> PageIter {
+        self.page_iter_range(
             PageIndex(0),
             PageIndex((Self::PAGES_PER_BLOCK * Self::BLOCK_COUNT) as u32),
         )
     }
 
-    fn block_iter_from(start: BlockIndex) -> BlockIter {
-        Self::block_iter_range(start, BlockIndex(Self::BLOCK_COUNT as u16))
+    fn block_iter_from(&self, start: BlockIndex) -> BlockIter {
+        self.block_iter_range(start, BlockIndex(Self::BLOCK_COUNT as u16))
     }
-    fn page_iter_from(start: PageIndex) -> PageIter {
-        Self::page_iter_range(
+    fn page_iter_from(&self, start: PageIndex) -> PageIter {
+        self.page_iter_range(
             start,
             PageIndex((Self::PAGES_PER_BLOCK * Self::BLOCK_COUNT) as u32),
         )
