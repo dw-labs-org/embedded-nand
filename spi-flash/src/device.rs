@@ -36,15 +36,18 @@ impl<SPI, D, const N: usize> SpiFlash<SPI, D, N> {
 
 impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D, N> {
     /// Get the Jedec ID of the flash device
-    pub fn jedec_blocking(&mut self) -> Result<JedecID, SpiFlashError<SPI>> {
+    pub fn jedec_blocking(&mut self) -> Result<JedecID, SpiFlashError<SPI::Error>> {
         self.device.read_jedec_id_cmd(&mut self.spi)
     }
     /// Reset the flash device
-    pub fn reset_blocking(&mut self) -> Result<(), SpiFlashError<SPI>> {
+    pub fn reset_blocking(&mut self) -> Result<(), SpiFlashError<SPI::Error>> {
         self.device.reset_cmd(&mut self.spi)
     }
     /// Erase a block
-    pub fn erase_block_blocking(&mut self, block: BlockIndex) -> Result<(), SpiFlashError<SPI>> {
+    pub fn erase_block_blocking(
+        &mut self,
+        block: BlockIndex,
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
         self.device.erase_block(&mut self.spi, block)
     }
     /// Read a page
@@ -52,7 +55,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         &mut self,
         page_address: PageIndex,
         buf: &mut [u8; N],
-    ) -> Result<(), SpiFlashError<SPI>> {
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
         // Read page
         self.device.read_page(&mut self.spi, page_address, buf)
         // Check ECC if enabled
@@ -64,7 +67,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         page_address: PageIndex,
         column_address: ColumnAddress,
         buf: &mut [u8],
-    ) -> Result<(), SpiFlashError<SPI>> {
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
         // Read page
         self.device
             .read_page_slice(&mut self.spi, page_address, column_address, buf)
@@ -76,7 +79,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         &mut self,
         page_address: PageIndex,
         buf: &[u8; N],
-    ) -> Result<(), SpiFlashError<SPI>> {
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
         // Write page
         self.device.write_page(&mut self.spi, page_address, buf)
     }
@@ -87,7 +90,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         page_address: PageIndex,
         column_address: ColumnAddress,
         buf: &[u8],
-    ) -> Result<(), SpiFlashError<SPI>> {
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
         // Write page
         self.device
             .write_page_slice(&mut self.spi, page_address, column_address, buf)
@@ -98,7 +101,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         &mut self,
         src_page_address: PageIndex,
         dest_page_address: PageIndex,
-    ) -> Result<(), SpiFlashError<SPI>> {
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
         // Load the page into the device buffer
         self.device.page_read_cmd(&mut self.spi, src_page_address)?;
         // Write the page to the destination address
@@ -114,7 +117,10 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     }
 
     /// Mark a block as bad
-    pub fn mark_block_bad_blocking(&mut self, block: BlockIndex) -> Result<(), SpiFlashError<SPI>> {
+    pub fn mark_block_bad_blocking(
+        &mut self,
+        block: BlockIndex,
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
         self.device.mark_block_bad(&mut self.spi, block)
     }
 }
@@ -313,10 +319,10 @@ impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: 
 }
 
 impl<SPI: SpiDevice, D, const N: usize> ErrorType for SpiFlash<SPI, D, N> {
-    type Error = SpiFlashError<SPI>;
+    type Error = SpiFlashError<SPI::Error>;
 }
 
-impl<SPI: SpiDevice> NandFlashError for SpiFlashError<SPI> {
+impl<SE: Debug> NandFlashError for SpiFlashError<SE> {
     fn kind(&self) -> NandFlashErrorKind {
         match self {
             SpiFlashError::NotAligned => NandFlashErrorKind::NotAligned,

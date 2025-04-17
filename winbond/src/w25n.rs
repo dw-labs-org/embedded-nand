@@ -37,7 +37,7 @@ impl<const B: u32> SpiNand<2048> for W25N<B> {
 }
 
 impl<SPI: SpiDevice, const B: u32> SpiNandBlocking<SPI, 2048> for W25N<B> {
-    fn read_jedec_id_cmd(&self, spi: &mut SPI) -> Result<JedecID, SpiFlashError<SPI>> {
+    fn read_jedec_id_cmd(&self, spi: &mut SPI) -> Result<JedecID, SpiFlashError<SPI::Error>> {
         let mut buf = [0; 3];
         spi_transfer(
             spi,

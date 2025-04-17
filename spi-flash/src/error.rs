@@ -1,13 +1,20 @@
-use embedded_hal::spi::SpiDevice;
+use core::fmt::Debug;
 use embedded_nand::NandFlashErrorKind;
 
-#[derive(thiserror::Error)]
+/// Error type for the SPI flash driver.
+///
+/// This error type is used for both blocking and async SPI flash drivers.
+/// It is generic over the SPI error type (SE), which allows for different SPI implementations.
+/// This is either [`embedded_hal::spi::Error`] or [`embedded_hal_async::spi::Error`].
+///
+///
+#[derive(Debug, thiserror::Error)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum SpiFlashError<SPI: SpiDevice> {
+pub enum SpiFlashError<SE> {
     /// Error from the SPI peripheral
     #[error("SpiDevice error: {0}")]
-    SPI(SPI::Error),
+    SPI(SE),
     /// Block Erase failed.
     /// This can happen if the block is protected, write is disabled or block has failed.
     #[error("Erase failed")]
@@ -31,22 +38,8 @@ pub enum SpiFlashError<SPI: SpiDevice> {
     Other,
 }
 
-impl<SPI: SpiDevice> core::fmt::Debug for SpiFlashError<SPI> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            SpiFlashError::SPI(e) => write!(f, "SPI error: {:?}", e),
-            SpiFlashError::EraseFailed => write!(f, "Erase failed"),
-            SpiFlashError::ProgramFailed => write!(f, "Program failed"),
-            SpiFlashError::ReadFailed => write!(f, "Read failed"),
-            SpiFlashError::OutOfBounds => write!(f, "Out of bounds"),
-            SpiFlashError::NotAligned => write!(f, "Not aligned"),
-            SpiFlashError::Other => write!(f, "Other error"),
-        }
-    }
-}
-
-// This impl is only for the helper check bounds / alignment function for auto conversion
-impl<SPI: SpiDevice> From<NandFlashErrorKind> for SpiFlashError<SPI> {
+// This impl is only for the helper check bounds / alignment functions for auto conversion from errors
+impl<SE> From<NandFlashErrorKind> for SpiFlashError<SE> {
     fn from(kind: NandFlashErrorKind) -> Self {
         match kind {
             NandFlashErrorKind::NotAligned => SpiFlashError::NotAligned,
