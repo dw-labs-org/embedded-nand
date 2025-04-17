@@ -34,6 +34,10 @@ pub trait SpiNand<const N: usize> {
     /// Minimum number of bytes the storage peripheral can read
     const READ_SIZE: u32 = 1;
 
+    // JEDEC ID
+    const JEDEC_MANUFACTURER_ID: u8;
+    const JEDEC_DEVICE_ID: u16;
+
     // Commands
     /// The command to reset the flash device
     const RESET_COMMAND: u8 = 0xFF;
