@@ -4,14 +4,18 @@ use utils::{spi_transaction, spi_transfer, spi_transfer_in_place, spi_write};
 
 use crate::{error::SpiFlashError, ECCStatus, JedecID, SpiNand};
 
-/// Blocking SPI NAND flash trait
-/// Contains the low level, mostly single SPI operation commands
+/// Blocking SPI NAND flash trait.
+/// Contains the low level, mostly single SPI operation commands.
+///
+/// Some compound functions are provided including getting specific status flags,
+/// and read/write/execute functions including the required write enable,
+/// waiting and checking for errors.
+///
+/// Any changes made to these default functions must match the behaviour
 ///
 /// The default implementations are fairly generic and should work for most SPI NAND flash devices.
 /// Look to make changes to the [SpiNand] trait first to change the default behavior.
 /// If this isn't possible, override the default function(s).
-///
-///
 ///
 /// For async implementations, see [crate::async_trait::SpiNandAsync].
 pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {

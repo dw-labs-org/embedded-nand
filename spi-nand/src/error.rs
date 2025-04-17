@@ -42,7 +42,7 @@ pub enum SpiFlashError<SE> {
     Other,
 }
 
-/// Convert from SPI error to more genetic NandFlashError
+// Convert from SPI error to more generic NandFlashError
 impl<SE: Debug> NandFlashError for SpiFlashError<SE> {
     fn kind(&self) -> NandFlashErrorKind {
         match self {

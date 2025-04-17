@@ -7,6 +7,8 @@ pub mod cmd_blocking;
 mod device;
 pub mod error;
 
+pub use device::SpiNandDevice;
+
 /// Core trait that a NAND flash device must implement.
 ///
 /// Enables use of the [crate::cmd_blocking::SpiNandBlocking] and
@@ -63,13 +65,18 @@ pub trait SpiNand<const N: usize> {
     const DEEP_POWER_DOWN_EXIT_COMMAND: u8 = 0xAB;
 }
 
+/// Possible ECC status values after performing a read operation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ECCStatus {
+    /// No errors detected or corrected
     Ok,
+    /// Errors detected and corrected
     Corrected,
+    /// Errors detected and corrected, below threshold for failure
     Failing,
+    /// Errors detcted but not corrected
     Failed,
 }
 
