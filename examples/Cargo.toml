@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 winbond = { path = "../winbond" }
-spi-flash = { path = "../spi-flash", features = ["defmt"] }
+spi-nand = { path = "../spi-nand", features = ["defmt"] }
 flashmap = { path = "../flashmap", features = ["defmt"] }
 embedded-nand = { path = "../embedded-nand", features = ["defmt"] }
 

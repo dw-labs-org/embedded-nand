@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use embedded_nand::NandFlashErrorKind;
+use embedded_nand::{NandFlashError, NandFlashErrorKind};
 
 /// Error type for the SPI flash driver.
 ///
@@ -27,6 +27,10 @@ pub enum SpiFlashError<SE> {
     /// This can happen due to an ECC error
     #[error("Read failed")]
     ReadFailed,
+    /// Read was successful, but ECC error was detected
+    /// This marks the block as failing and requires remapping
+    #[error("Read was successful, but ECC error was detected")]
+    EccError,
     /// Requested bytes out of bounds
     #[error("Requested bytes out of bounds")]
     OutOfBounds,
@@ -36,6 +40,22 @@ pub enum SpiFlashError<SE> {
     /// Other error
     #[error("Other error. Should not happen")]
     Other,
+}
+
+/// Convert from SPI error to more genetic NandFlashError
+impl<SE: Debug> NandFlashError for SpiFlashError<SE> {
+    fn kind(&self) -> NandFlashErrorKind {
+        match self {
+            SpiFlashError::NotAligned => NandFlashErrorKind::NotAligned,
+            SpiFlashError::OutOfBounds => NandFlashErrorKind::OutOfBounds,
+            SpiFlashError::SPI(_) => NandFlashErrorKind::Other,
+            SpiFlashError::EraseFailed => NandFlashErrorKind::BlockFail(None),
+            SpiFlashError::ProgramFailed => NandFlashErrorKind::BlockFail(None),
+            SpiFlashError::ReadFailed => NandFlashErrorKind::BlockFail(None),
+            SpiFlashError::EccError => NandFlashErrorKind::BlockFailing(None),
+            SpiFlashError::Other => NandFlashErrorKind::Other,
+        }
+    }
 }
 
 // This impl is only for the helper check bounds / alignment functions for auto conversion from errors

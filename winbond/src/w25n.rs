@@ -1,10 +1,5 @@
 use embedded_hal::spi::SpiDevice;
-use spi_flash::{
-    async_trait::{SpiFlashErrorASync, SpiNandAsync},
-    blocking::{utils::spi_transfer, SpiNandBlocking},
-    error::SpiFlashError,
-    JedecID, SpiNand,
-};
+use spi_nand::SpiNandCore;
 
 /// Concrete type that implements all the flash device features
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -31,7 +26,7 @@ impl<const B: u32> Default for W25N<B> {
     }
 }
 
-impl<const B: u32> SpiNand<2048> for W25N<B> {
+impl<const B: u32> SpiNandCore<2048> for W25N<B> {
     const PAGES_PER_BLOCK: u32 = 64;
     const BLOCK_COUNT: u32 = B;
 }

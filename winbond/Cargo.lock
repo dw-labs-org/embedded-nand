@@ -130,7 +130,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spi-flash"
+name = "spi-nand"
 version = "0.1.0"
 dependencies = [
  "embedded-hal",
@@ -186,5 +186,5 @@ dependencies = [
  "embedded-nand",
  "log",
  "serde",
- "spi-flash",
+ "spi-nand",
 ]

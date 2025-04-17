@@ -1,15 +1,16 @@
 #![no_std]
+// Must be first to share macros across crate
 pub(crate) mod fmt;
 
-pub mod async_trait;
-pub mod blocking;
-pub mod device;
+pub mod cmd_async;
+pub mod cmd_blocking;
+mod device;
 pub mod error;
 
 /// Core trait that a NAND flash device must implement.
 ///
-/// Enables use of the [crate::blocking::SpiNandBlocking] and
-/// [crate::async_trait::SpiNandAsync] traits.
+/// Enables use of the [crate::cmd_blocking::SpiNandBlocking] and
+/// [crate::cmd_async::SpiNandAsync] traits.
 ///
 /// At minimum requires [SpiNand::PAGE_SIZE] generic, [SpiNand::PAGES_PER_BLOCK] and
 /// [SpiNand::BLOCK_COUNT] constants to define the size and layout of the device.

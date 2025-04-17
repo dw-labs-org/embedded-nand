@@ -3,21 +3,41 @@ use core::fmt::Debug;
 use embedded_hal::spi::SpiDevice;
 use embedded_nand::{
     check_erase, check_read, check_slice, check_write, AddressConversions, BlockIndex, BlockStatus,
-    ByteAddress, ColumnAddress, ErrorType, NandFlash, NandFlashError, NandFlashErrorKind,
-    PageIndex,
+    ByteAddress, ColumnAddress, ErrorType, NandFlash, PageIndex,
 };
 
-use crate::{async_trait::SpiNandAsync, blocking::SpiNandBlocking, error::SpiFlashError};
+use crate::{cmd_blocking::SpiNandBlocking, error::SpiFlashError};
 
 use super::JedecID;
 
+/// Concrete type that implements all the flash device features.
+///
+/// This type is generic over the SPI peripheral and the flash device.
+/// The aim is to support a wide range of SPI Nand devices by implementing the
+/// defacto standard commands in the [SpiNandBlocking] and [SpiNandAsync] traits.
+/// These are configurable to some extent by the [crate::SpiNand] trait, which also
+/// defines the layout of the device.
+///
+/// For overwriting specific commands, the functions in [SpiNandBlocking] and
+/// [SpiNandAsync] should be overwritten.
+///
+/// [SpiNandDevice] implements the [embedded_nand::NandFlash] trait, which provides
+/// an abstraction for NAND flash devices which a flash translation layer (FTL) /
+/// bad block management (BBM) / wear levelling algorithm or file system can use.
+///
+/// To use the blocking interface, the device D must implement [SpiNandBlocking]
+/// and SPI must implement [embedded_hal::spi::SpiDevice].
+///
+/// To use the async interface, the device D must implement [SpiNandAsync]
+/// and SPI must implement [embedded_hal_async::spi::SpiDevice].
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct SpiFlash<SPI, D, const N: usize> {
+pub struct SpiNandDevice<SPI, D, const N: usize> {
     pub spi: SPI,
     pub device: D,
 }
-
-impl<SPI, D, const N: usize> Debug for SpiFlash<SPI, D, N>
+// Manually implement Debug to avoid bounds on SPI
+// D must implement Debug, which should be fine as its just data
+impl<SPI, D, const N: usize> Debug for SpiNandDevice<SPI, D, N>
 where
     D: Debug,
 {
@@ -28,29 +48,31 @@ where
     }
 }
 
-impl<SPI, D, const N: usize> SpiFlash<SPI, D, N> {
+impl<SPI, D, const N: usize> SpiNandDevice<SPI, D, N> {
+    /// Create a new [SpiNandDevice] with the given SPI peripheral and flash device.
     pub fn new(spi: SPI, device: D) -> Self {
-        SpiFlash { spi, device }
+        SpiNandDevice { spi, device }
     }
 }
 
-impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D, N> {
-    /// Get the Jedec ID of the flash device
+impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiNandDevice<SPI, D, N> {
+    /// Get the Jedec ID of the flash device using blocking SPI
     pub fn jedec_blocking(&mut self) -> Result<JedecID, SpiFlashError<SPI::Error>> {
         self.device.read_jedec_id_cmd(&mut self.spi)
     }
-    /// Reset the flash device
+    /// Reset the flash device using blocking SPI
     pub fn reset_blocking(&mut self) -> Result<(), SpiFlashError<SPI::Error>> {
         self.device.reset_cmd(&mut self.spi)
     }
-    /// Erase a block
+    /// Erase a block of flash memory using blocking SPI
     pub fn erase_block_blocking(
         &mut self,
         block: BlockIndex,
     ) -> Result<(), SpiFlashError<SPI::Error>> {
         self.device.erase_block(&mut self.spi, block)
     }
-    /// Read a page
+    /// Read a page into the buffer using blocking SPI
+    /// Checks for ECC errors
     pub fn read_page_blocking(
         &mut self,
         page_address: PageIndex,
@@ -61,7 +83,8 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         // Check ECC if enabled
     }
 
-    /// Read a slice of a page
+    /// Read a slice of a page using blocking SPI
+    /// Checks for ECC errors
     pub fn read_page_slice_blocking(
         &mut self,
         page_address: PageIndex,
@@ -74,7 +97,9 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         // Check ECC if enabled
     }
 
-    /// Write a page
+    /// Write a page to the device using blocking SPI
+    /// This will overwrite the entire page
+    /// The page must be erased before writing
     pub fn write_page_blocking(
         &mut self,
         page_address: PageIndex,
@@ -84,7 +109,9 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         self.device.write_page(&mut self.spi, page_address, buf)
     }
 
-    /// Write a slice of a page
+    /// Write a slice of a page to the device using blocking SPI
+    /// This will overwrite the slice of the page
+    /// The state of unwritten bytes is defined by the device
     pub fn write_page_slice_blocking(
         &mut self,
         page_address: PageIndex,
@@ -97,6 +124,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     }
 
     /// Copy a page to another using the device buffer
+    /// TODO: This might not be supported by all devices
     pub fn copy_page_blocking(
         &mut self,
         src_page_address: PageIndex,
@@ -116,7 +144,9 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
         Ok(())
     }
 
-    /// Mark a block as bad
+    /// Mark a block as bad using blocking SPI
+    /// This will mark the block as bad in the device
+    /// This is device specific and not guaranteed to work on all devices
     pub fn mark_block_bad_blocking(
         &mut self,
         block: BlockIndex,
@@ -125,218 +155,13 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiFlash<SPI, D
     }
 }
 
-impl<SPI: embedded_hal_async::spi::SpiDevice, D: SpiNandAsync<SPI, N>, const N: usize>
-    SpiFlash<SPI, D, N>
-{
-    /// Get the Jedec ID of the flash device
-    pub async fn jedec(&mut self) -> Result<JedecID, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.read_jedec_id(&mut self.spi).await
-    }
-
-    /// Reset the flash device
-    pub async fn reset(&mut self) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.reset(&mut self.spi).await
-    }
-
-    /// Read status register 1
-    pub async fn read_status_register_1(
-        &mut self,
-    ) -> Result<u8, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.read_status_register_1(&mut self.spi).await
-    }
-
-    /// Read status register 2
-    pub async fn read_status_register_2(
-        &mut self,
-    ) -> Result<u8, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.read_status_register_2(&mut self.spi).await
-    }
-
-    /// Read status register 3
-    pub async fn read_status_register_3(
-        &mut self,
-    ) -> Result<u8, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.read_status_register_3(&mut self.spi).await
-    }
-
-    /// Check if the device is busy
-    pub async fn is_busy(&mut self) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.is_busy(&mut self.spi).await
-    }
-
-    /// Wait until the device is ready
-    pub async fn wait_ready(&mut self) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        while self.is_busy().await? {}
-        Ok(())
-    }
-
-    /// Read a page into the device buffer/register
-    pub async fn page_read(
-        &mut self,
-        address: PageIndex,
-    ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.page_read(&mut self.spi, address).await?;
-        self.wait_ready().await?;
-        let ecc = self.device.check_ecc(&mut self.spi).await?;
-        match ecc {
-            super::ECCStatus::Ok => Ok(true),
-            super::ECCStatus::Corrected => Ok(true),
-            super::ECCStatus::Failing => Ok(false),
-            super::ECCStatus::Failed => Err(crate::async_trait::SpiFlashErrorASync::ReadFailed),
-        }
-    }
-
-    /// Read bytes of a page from the device buffer/register starting from column address
-    pub async fn page_read_buffer(
-        &mut self,
-        ca: ColumnAddress,
-        buf: &mut [u8],
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.page_read_buffer(&mut self.spi, ca, buf).await
-    }
-
-    /// Enable writing to the flash device
-    pub async fn write_enable(
-        &mut self,
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.write_enable(&mut self.spi).await
-    }
-
-    /// Disable writing to the flash device
-    pub async fn write_disable(
-        &mut self,
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.write_disable(&mut self.spi).await
-    }
-
-    /// Erase a block of flash memory
-    /// Checks the busy flag until complete
-    /// Checks erase failed flag
-    pub async fn erase_block(
-        &mut self,
-        page_address: PageIndex,
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.erase_block(&mut self.spi, page_address).await?;
-        self.wait_ready().await?;
-        if self.erase_failed().await? {
-            Err(crate::async_trait::SpiFlashErrorASync::EraseFailed)
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Check if writing to the device is enabled
-    pub async fn is_write_enabled(
-        &mut self,
-    ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.is_write_enabled(&mut self.spi).await
-    }
-
-    /// Check if programming failed
-    /// This is only valid after a write operation
-    pub async fn program_failed(
-        &mut self,
-    ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.program_failed(&mut self.spi).await
-    }
-
-    /// Check if erasing failed
-    /// This is only valid after an erase operation
-    pub async fn erase_failed(
-        &mut self,
-    ) -> Result<bool, crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.erase_failed(&mut self.spi).await
-    }
-
-    /// Load bytes to the device buffer/register, enable writing first.
-    /// This will reset the buffer/register to 0xFF
-    pub async fn program_load(
-        &mut self,
-        ca: ColumnAddress,
-        buf: &[u8],
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.write_enable().await?;
-        self.device.program_load(&mut self.spi, ca, buf).await
-    }
-
-    /// Write buffer to page, wait until completes, check for program failure
-    pub async fn program_execute(
-        &mut self,
-        page_address: PageIndex,
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device
-            .program_execute(&mut self.spi, page_address)
-            .await?;
-        self.wait_ready().await?;
-        if self.program_failed().await? {
-            Err(crate::async_trait::SpiFlashErrorASync::ProgramFailed)
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Read a whole page from the device
-    /// This will read the page into the device buffer/register and then read it to the buffer
-    pub async fn read_page(
-        &mut self,
-        address: PageIndex,
-        buf: &mut [u8; N],
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.page_read(address).await?;
-        self.page_read_buffer(ColumnAddress::new(0), buf).await
-    }
-
-    /// Write a whole page to the device
-    /// This will write the page to the buffer/register and then write it to the page
-    pub async fn write_page(
-        &mut self,
-        address: PageIndex,
-        buf: &[u8; N],
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.program_load(ColumnAddress::new(0), buf).await?;
-        self.program_execute(address).await
-    }
-
-    /// Disable block protection
-    pub async fn disable_block_protection(
-        &mut self,
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.disable_block_protection(&mut self.spi).await
-    }
-
-    /// Enter deep power down
-    pub async fn deep_power_down(
-        &mut self,
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.deep_power_down(&mut self.spi).await
-    }
-    /// Exit deep power down
-    pub async fn deep_power_down_exit(
-        &mut self,
-    ) -> Result<(), crate::async_trait::SpiFlashErrorASync<SPI>> {
-        self.device.deep_power_down_exit(&mut self.spi).await
-    }
-}
-
-impl<SPI: SpiDevice, D, const N: usize> ErrorType for SpiFlash<SPI, D, N> {
+impl<SPI: SpiDevice, D, const N: usize> ErrorType for SpiNandDevice<SPI, D, N> {
     type Error = SpiFlashError<SPI::Error>;
 }
 
-impl<SE: Debug> NandFlashError for SpiFlashError<SE> {
-    fn kind(&self) -> NandFlashErrorKind {
-        match self {
-            SpiFlashError::NotAligned => NandFlashErrorKind::NotAligned,
-            SpiFlashError::OutOfBounds => NandFlashErrorKind::OutOfBounds,
-            SpiFlashError::SPI(_) => NandFlashErrorKind::Other,
-            SpiFlashError::EraseFailed => NandFlashErrorKind::BlockFail(None),
-            SpiFlashError::ProgramFailed => NandFlashErrorKind::BlockFail(None),
-            SpiFlashError::ReadFailed => NandFlashErrorKind::BlockFail(None),
-            SpiFlashError::Other => NandFlashErrorKind::Other,
-        }
-    }
-}
-
-impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash for SpiFlash<SPI, D, N> {
+impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> NandFlash
+    for SpiNandDevice<SPI, D, N>
+{
     const READ_SIZE: usize = D::READ_SIZE as usize;
     const PAGE_SIZE: usize = D::PAGE_SIZE as usize;
     const BLOCK_COUNT: usize = D::BLOCK_COUNT as usize;
