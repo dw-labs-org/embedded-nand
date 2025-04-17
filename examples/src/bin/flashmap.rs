@@ -9,8 +9,9 @@ use embedded_nand::{NandFlash, NandFlashIter};
 use embassy_stm32::gpio::Output;
 
 use flashmap::FlashMap;
-use spi_flash::SpiNand;
-use winbond::w25n::W25N02K;
+use spi_nand::{SpiNand, SpiNandDevice};
+use spi_nand_devices::winbond::w25n::W25N02K;
+
 use {defmt_rtt as _, panic_probe as _}; // global logger
 
 // same panicking *behavior* as `panic-probe` but doesn't print a panic message
@@ -72,15 +73,15 @@ async fn main(spawner: Spawner) {
             .unwrap();
 
     // Create [spi_flash::device::SpiFlash] instance
-    let device = winbond::w25n::W25N02K::new();
+    let device = W25N02K::new();
     let b = <W25N02K as SpiNand<2048>>::BLOCK_COUNT;
 
-    let mut flash = spi_flash::device::SpiFlash::new(spi_dev, device);
+    let mut flash = SpiNandDevice::new(spi_dev, device);
 
     // Read the JEDEC ID
     dbg!(flash.reset_blocking());
     dbg!(flash.jedec_blocking());
-    dbg!(flash.disable_block_protection().await);
+    // dbg!(flash.disable_block_protection().await);
 
     // initialise the flashmap with 2000 logical blocks (46 spare, 2 for map)
     let mut flashmap = flashmap::FlashMap::<_, 2000>::init(flash).unwrap();

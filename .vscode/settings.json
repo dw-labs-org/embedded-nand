@@ -3,7 +3,7 @@
     "embedded-nand/Cargo.toml",
     "embedded-nand-async/Cargo.toml",
     "spi-nand/Cargo.toml",
-    "winbond/Cargo.toml",
+    "spi-nand-devices/Cargo.toml",
     "flashmap/Cargo.toml",
     "examples/Cargo.toml"
   ],

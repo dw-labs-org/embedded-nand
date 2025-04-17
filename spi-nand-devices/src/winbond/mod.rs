@@ -1,5 +1,3 @@
-#![no_std]
-
 //! Winbond SPI NAND Flash driver
 //!
 //! This crate provides the implementation of the [spi-nand::SpiNand],

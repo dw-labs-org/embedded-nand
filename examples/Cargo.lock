@@ -533,7 +533,7 @@ dependencies = [
  "flashmap",
  "panic-probe",
  "spi-nand",
- "winbond",
+ "spi-nand-devices",
 ]
 
 [[package]]
@@ -754,6 +754,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "spi-nand-devices"
+version = "0.1.0"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-nand",
+ "spi-nand",
+]
+
+[[package]]
 name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -846,14 +856,4 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de437e2a6208b014ab52972a27e59b33fa2920d3e00fe05026167a1c509d19cc"
 dependencies = [
  "vcell",
-]
-
-[[package]]
-name = "winbond"
-version = "0.1.0"
-dependencies = [
- "embedded-hal 1.0.0",
- "embedded-hal-async",
- "embedded-nand",
- "spi-nand",
 ]

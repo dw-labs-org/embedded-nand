@@ -27,12 +27,11 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     }
 
     /// Read the JEDEC ID of the flash device
-    /// By default reads the first byte
-    // TODO: #1 Read the full JEDEC ID
+    /// command then byte then ID then 2 device ID bytes    
     fn read_jedec_id_cmd(&self, spi: &mut SPI) -> Result<JedecID, SpiFlashError<SPI::Error>> {
-        let mut buf = [0; 2];
-        spi_transfer(spi, &mut buf, &[Self::JEDEC_COMMAND, 0])?;
-        Ok(JedecID::new(buf[1], 1))
+        let mut buf = [Self::JEDEC_COMMAND, 0, 0, 0, 0];
+        spi_transfer_in_place(spi, &mut buf)?;
+        Ok(JedecID::new(buf[2], ((buf[3] as u16) << 8) + buf[4] as u16))
     }
 
     /// Read  status register 1

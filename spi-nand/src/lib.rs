@@ -82,24 +82,30 @@ pub enum ECCStatus {
 
 /// The JEDEC manufacturer ID of a flash device
 /// See https://www.jedec.org/standards-documents/docs/jep-106ab for a list of JEDEC IDs
+///
+/// Bank refers to which byte the ID is located in but isnt read by command?
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct JedecID {
     /// First non 0x7F byte read from Jedec command
     id: u8,
-    /// Bank refers to which byte the ID is located in
-    /// 1 = first byte, 2 = second byte etc, up to 16 as of 01/2025
-    bank: u8,
+    /// The device id. MSB first on wire
+    device: u16,
 }
 
 impl JedecID {
-    pub fn new(id: u8, bank: u8) -> Self {
-        JedecID { id, bank }
+    pub fn new(id: u8, device: u16) -> Self {
+        JedecID { id, device }
     }
 }
 #[cfg(feature = "defmt")]
 impl defmt::Format for JedecID {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "JedecID(id: {:02X}, bank: {})", self.id, self.bank);
+        defmt::write!(
+            f,
+            "JedecID(id: {:02X}, device: {:04X})",
+            self.id,
+            self.device
+        );
     }
 }
