@@ -1,6 +1,6 @@
 #![no_std]
 
-use core::ops::Range;
+use core::{fmt::Debug, ops::Range};
 
 use embedded_nand::{BlockIndex, ByteAddress, NandFlashError, NandFlashErrorKind, PageIndex};
 use thiserror::Error;
@@ -33,7 +33,7 @@ pub enum Error<F: embedded_nand::NandFlash> {
 
 impl<F> embedded_nand::NandFlashError for Error<F>
 where
-    F: embedded_nand::NandFlash,
+    F: embedded_nand::NandFlash + Debug,
 {
     fn kind(&self) -> embedded_nand::NandFlashErrorKind {
         match self {
@@ -71,7 +71,7 @@ where
 ///
 /// The map consumes the first 2 valid blocks in the device.
 /// Spare blocks = BC - LBC - 2
-#[repr(C)]
+#[derive(Debug)]
 pub struct FlashMap<F, const LBC: usize> {
     /// The flash device that is used to store the mapping
     flash: F,
@@ -85,7 +85,7 @@ pub struct FlashMap<F, const LBC: usize> {
 
 impl<F, const LBC: usize> FlashMap<F, LBC>
 where
-    F: embedded_nand::NandFlash,
+    F: embedded_nand::NandFlash + Debug,
 {
     /// Try to load the mapping from flash, create new one if not present
     ///
@@ -556,7 +556,7 @@ where
 
 impl<F, const LBC: usize> embedded_nand::ErrorType for FlashMap<F, LBC>
 where
-    F: embedded_nand::NandFlash,
+    F: embedded_nand::NandFlash + Debug,
 {
     type Error = Error<F>;
 }
@@ -564,7 +564,7 @@ where
 // Impl the embedded nand trait to form the core public interface
 impl<F, const LBC: usize> embedded_nand::NandFlash for FlashMap<F, LBC>
 where
-    F: embedded_nand::NandFlash,
+    F: embedded_nand::NandFlash + Debug,
 {
     const READ_SIZE: usize = F::READ_SIZE;
     const PAGE_SIZE: usize = F::PAGE_SIZE;
@@ -705,6 +705,7 @@ where
 }
 
 /// Data structure that is written to flash consiting of header, map array and terminator
+#[derive(Debug)]
 #[repr(C)]
 struct FlashMapData<const LBC: usize> {
     /// Header

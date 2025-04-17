@@ -14,11 +14,21 @@ use crate::{
 
 use super::JedecID;
 
-#[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SpiFlash<SPI, D, const N: usize> {
     pub spi: SPI,
     pub device: D,
+}
+
+impl<SPI, D, const N: usize> Debug for SpiFlash<SPI, D, N>
+where
+    D: Debug,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SpiFlash")
+            .field("device", &self.device)
+            .finish()
+    }
 }
 
 impl<SPI, D, const N: usize> SpiFlash<SPI, D, N> {

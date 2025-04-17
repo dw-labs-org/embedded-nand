@@ -13,6 +13,7 @@ serde = { version = "1", optional = true, default-features = false, features = [
 embedded-hal = { version = "1.0.0", features = ["defmt-03"] }
 embedded-hal-async = { version = "1.0.0", features = ["defmt-03"] }
 embedded-nand = { path = "../embedded-nand" }
+thiserror = { version = "2.0.12", default-features = false }
 
 
 [features]

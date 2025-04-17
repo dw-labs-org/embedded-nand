@@ -750,6 +750,7 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-nand",
+ "thiserror",
 ]
 
 [[package]]

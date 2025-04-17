@@ -6,6 +6,7 @@ use spi_flash::{
 };
 
 /// Concrete type that implements all the flash device features
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct W25N<const B: u32>();
 
 // /// Alias for [SpiFlash] that uses [W25NDevice]

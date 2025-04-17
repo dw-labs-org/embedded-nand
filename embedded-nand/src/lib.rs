@@ -7,7 +7,7 @@ pub mod test;
 pub use address::{AddressConversions, BlockIndex, ByteAddress, ColumnAddress, PageIndex};
 pub use iter::NandFlashIter;
 
-pub trait NandFlashError {
+pub trait NandFlashError: core::fmt::Debug {
     /// Convert a specific NAND flash error into a generic error kind
     fn kind(&self) -> NandFlashErrorKind;
 }
