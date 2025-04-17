@@ -34,25 +34,56 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         Ok(JedecID::new(buf[2], ((buf[3] as u16) << 8) + buf[4] as u16))
     }
 
-    /// Read  status register 1
-    fn read_status_register_1_cmd(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI::Error>> {
-        let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, 0xA0, 0];
+    /// Read a register
+    /// Warning: does not check if the register is valid
+    fn read_register_cmd(
+        &self,
+        spi: &mut SPI,
+        register: u8,
+    ) -> Result<u8, SpiFlashError<SPI::Error>> {
+        let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, register, 0];
         spi_transfer_in_place(spi, &mut buf)?;
         Ok(buf[2])
     }
 
-    /// Read status register 2
-    fn read_status_register_2_cmd(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI::Error>> {
-        let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, 0xB0, 0];
-        spi_transfer_in_place(spi, &mut buf)?;
-        Ok(buf[2])
+    /// Write a register
+    /// Warning: does not check if the register is valid
+    /// Warning: Some registers / bits are not writable
+    fn write_register_cmd(
+        &self,
+        spi: &mut SPI,
+        register: u8,
+        data: u8,
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
+        spi_write(spi, &[Self::STATUS_REGISTER_WRITE_COMMAND, register, data])
     }
 
-    /// Read status register 3
-    fn read_status_register_3_cmd(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI::Error>> {
-        let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, 0xC0, 0];
+    /// Set bits in a register
+    fn set_register_cmd(
+        &self,
+        spi: &mut SPI,
+        register: u8,
+        mask: u8,
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
+        let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, register, 0];
         spi_transfer_in_place(spi, &mut buf)?;
-        Ok(buf[2])
+        buf[2] |= mask;
+        buf[0] = Self::STATUS_REGISTER_WRITE_COMMAND;
+        spi_write(spi, &buf)
+    }
+
+    /// Clear bits in a register
+    fn clear_register_cmd(
+        &self,
+        spi: &mut SPI,
+        register: u8,
+        mask: u8,
+    ) -> Result<(), SpiFlashError<SPI::Error>> {
+        let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, register, 0];
+        spi_transfer_in_place(spi, &mut buf)?;
+        buf[2] &= !mask;
+        buf[0] = Self::STATUS_REGISTER_WRITE_COMMAND;
+        spi_write(spi, &buf)
     }
 
     /// Read a page into the device buffer/register
@@ -199,43 +230,32 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
     }
 
     // ============= Status functions ============
-    /// Check the ECC flags after a page read
-    fn check_ecc(&self, spi: &mut SPI) -> Result<ECCStatus, SpiFlashError<SPI::Error>> {
-        let status = self.read_status_register_3_cmd(spi)? & 0x30;
-        match status {
-            0x00 => Ok(ECCStatus::Ok),
-            0x10 => Ok(ECCStatus::Corrected),
-            0x20 => Ok(ECCStatus::Failed),
-            _ => Ok(ECCStatus::Failing),
-        }
-    }
 
     /// Check if write protection is enabled
     fn is_write_enabled(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI::Error>> {
-        Ok((self.read_status_register_3_cmd(spi)? & 0x02) != 0)
+        Ok((self.read_register_cmd(spi, Self::STATUS_REGISTER)? & 0x02) != 0)
     }
 
     /// Check if programming/writing failed
     fn program_failed(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI::Error>> {
-        Ok((self.read_status_register_3_cmd(spi)? & 0x08) != 0)
+        Ok((self.read_register_cmd(spi, Self::STATUS_REGISTER)? & 0x08) != 0)
     }
 
     /// Check if erase failed
     fn erase_failed(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI::Error>> {
-        Ok((self.read_status_register_3_cmd(spi)? & 0x04) != 0)
+        Ok((self.read_register_cmd(spi, Self::STATUS_REGISTER)? & 0x04) != 0)
     }
 
     /// Check if busy flag is set
     fn is_busy(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI::Error>> {
-        let status = self.read_status_register_3_cmd(spi)?;
+        let status = self.read_register_cmd(spi, Self::STATUS_REGISTER)?;
         Ok((status & 0x01) != 0)
     }
 
     /// Disable block protection
-    /// Writes bits 3 to 6 as 0 in status register 1 (after reading)
+    /// Sets bits 3 to 6 as 0 in status register 1
     fn disable_block_protection(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI::Error>> {
-        let reg = self.read_status_register_1_cmd(spi)?;
-        self.write_status_register_1_cmd(spi, reg & 0b10000111)
+        self.clear_register_cmd(spi, Self::CONFIGURATION_REGISTER, 0b1111000)
     }
 
     // ============ Bad Block functions ============

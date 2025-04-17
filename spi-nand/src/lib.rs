@@ -67,6 +67,14 @@ pub trait SpiNand<const N: usize> {
     const DEEP_POWER_DOWN_COMMAND: u8 = 0xB9;
     /// Command to exit deep power down
     const DEEP_POWER_DOWN_EXIT_COMMAND: u8 = 0xAB;
+
+    // Registers
+    /// Register (1), standard config, RW
+    const CONFIGURATION_REGISTER: u8 = 0xA0;
+    /// Configuration register (2). Custom config per device
+    const FEATURE_REGISTER: u8 = 0xB0;
+    /// Status register (3). Standard readonly status register
+    const STATUS_REGISTER: u8 = 0xC0;
 }
 
 /// Possible ECC status values after performing a read operation
