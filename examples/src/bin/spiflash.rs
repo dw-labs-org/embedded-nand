@@ -80,7 +80,7 @@ async fn main(spawner: Spawner) {
 
     // Read the JEDEC ID
     dbg!(flash.reset_blocking());
-    dbg!(flash.jedec_blocking());
+    dbg!(flash.verify_jedec_blocking());
     // dbg!(flash.disable_block_protection().await);
     let ba = BlockIndex::new(0);
     let pa = PageIndex::from_block_address(ba, 64);

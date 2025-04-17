@@ -60,6 +60,12 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiNandDevice<S
     pub fn jedec_blocking(&mut self) -> Result<JedecID, SpiFlashError<SPI::Error>> {
         self.device.read_jedec_id_cmd(&mut self.spi)
     }
+
+    /// Returns true if the connected device has the expected JEDEC ID
+    pub fn verify_jedec_blocking(&mut self) -> Result<bool, SpiFlashError<SPI::Error>> {
+        Ok(self.jedec_blocking()? == JedecID::new(D::JEDEC_MANUFACTURER_ID, D::JEDEC_DEVICE_ID))
+    }
+
     /// Reset the flash device using blocking SPI
     pub fn reset_blocking(&mut self) -> Result<(), SpiFlashError<SPI::Error>> {
         self.device.reset_cmd(&mut self.spi)
