@@ -2,10 +2,10 @@
 
 use core::ops::Range;
 
-use embedded_nand::{BlockIndex, ByteAddress, NandFlashError};
+use embedded_nand::{BlockIndex, ByteAddress, NandFlashError, NandFlashErrorKind, PageIndex};
 use thiserror::Error;
 mod fmt;
-use embedded_nand::AddressConversions;
+use embedded_nand::{AddressConversions, NandFlashIter};
 
 /// Magic bytes at the start of the flashmap
 const MAGIC: [u8; 4] = *b"FMAP";
@@ -21,10 +21,14 @@ pub enum Error<F: embedded_nand::NandFlash> {
     InvalidConfg,
     #[error("Not enough valid blocks")]
     NotEnoughValidBlocks,
-    #[error("Invalid block address")]
-    InvalidBlockAddress,
+    #[error("Request not aligned")]
+    NotAligned,
+    #[error("Request out of bounds")]
+    OutOfBounds,
     #[error("No superblocks available")]
     NoSuperBlocks,
+    #[error("Other Error")]
+    Other,
 }
 
 impl<F> embedded_nand::NandFlashError for Error<F>
@@ -36,8 +40,26 @@ where
             Error::Flash(e) => e.kind(),
             Error::InvalidConfg => embedded_nand::NandFlashErrorKind::Other,
             Error::NotEnoughValidBlocks => embedded_nand::NandFlashErrorKind::Other,
-            Error::InvalidBlockAddress => embedded_nand::NandFlashErrorKind::OutOfBounds,
             Error::NoSuperBlocks => embedded_nand::NandFlashErrorKind::Other,
+            Error::NotAligned => embedded_nand::NandFlashErrorKind::NotAligned,
+            Error::OutOfBounds => embedded_nand::NandFlashErrorKind::OutOfBounds,
+            Error::Other => embedded_nand::NandFlashErrorKind::Other,
+        }
+    }
+}
+
+// This is for convenience, to convert from the NandFlashErrorKind to the Error
+// when calling the check_slice functions
+impl<F> From<NandFlashErrorKind> for Error<F>
+where
+    F: embedded_nand::NandFlash,
+{
+    fn from(e: NandFlashErrorKind) -> Self {
+        match e {
+            NandFlashErrorKind::NotAligned => Error::NotAligned,
+            NandFlashErrorKind::OutOfBounds => Error::OutOfBounds,
+            NandFlashErrorKind::Other => Error::Other,
+            _ => todo!(),
         }
     }
 }
@@ -107,7 +129,7 @@ where
         let mut map_blocks = [BlockIndex::default(); 2];
         let mut valid_header = None;
         // Go through first 2 valid blocks to try find a map
-        for (block_ind, block_address) in flashmap.flash.block_iter(BlockIndex::new(0)) {
+        for (block_ind, block_address) in F::block_iter_from(BlockIndex::new(0)) {
             debug!(
                 "Checking block {} at {} for map",
                 block_ind.as_u16(),
@@ -173,7 +195,7 @@ where
         // Iterate over the blocks to find LBC good blocks
         let mut logical_ind = 0;
         let mut final_block = None;
-        for (block_ind, block_address) in flashmap.flash.block_iter(first_block) {
+        for (block_ind, _) in F::block_iter_from(first_block) {
             // Check if the block is good
             if !flashmap
                 .flash
@@ -238,9 +260,28 @@ where
     /// Convert a logical block index to a physical block
     fn logical_to_physical(&self, logical_block: BlockIndex) -> Result<BlockIndex, Error<F>> {
         if logical_block.as_u16() >= LBC as u16 {
-            return Err(Error::InvalidBlockAddress);
+            return Err(Error::OutOfBounds);
         }
         Ok(self.data.map[logical_block.as_u16() as usize])
+    }
+
+    /// Convert a logical page index to a physical page
+    fn _logical_to_physical_page(&self, logical_page: PageIndex) -> Result<PageIndex, Error<F>> {
+        if logical_page.as_u32() >= (LBC as u32 * F::PAGES_PER_BLOCK as u32) {
+            return Err(Error::OutOfBounds);
+        }
+        let logical_block = logical_page.as_block_index(F::PAGES_PER_BLOCK as u32);
+        let physical_block = self.logical_to_physical(logical_block)?;
+        let page_offset = Self::page_in_block(logical_page);
+        Ok(Self::block_to_page_index(physical_block) + page_offset)
+    }
+
+    /// Convert a logical byte address to a physical byte address
+    fn logical_to_physical_byte(&self, logical_byte: ByteAddress) -> Result<ByteAddress, Error<F>> {
+        let logical_block = Self::byte_to_block_index(logical_byte);
+        let physical_block = self.logical_to_physical(logical_block)?;
+        let block_offset = Self::byte_in_block(logical_byte);
+        Ok(Self::block_to_byte_address(physical_block) + block_offset)
     }
 
     /// Address of the map array
@@ -559,16 +600,25 @@ where
         F::BLOCK_COUNT as u32 * Self::PAGES_PER_BLOCK as u32 * F::PAGE_SIZE as u32
     }
 
-    /// By definition of the flashmap, this will always return Ok
+    /// This should always return OK
     fn block_status(
         &mut self,
         block: BlockIndex,
     ) -> Result<embedded_nand::BlockStatus, Self::Error> {
-        Ok(embedded_nand::BlockStatus::Ok)
+        self.flash
+            .block_status(self.logical_to_physical(block)?)
+            .map_err(|e| Error::Flash(e))
     }
 
     fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
-        todo!()
+        // check alignment
+        for (block, _) in Self::block_iter_range(
+            Self::byte_to_block_index(ByteAddress::new(from)),
+            Self::byte_to_block_index(ByteAddress::new(to)),
+        ) {
+            self.erase_block(block)?;
+        }
+        Ok(())
     }
 
     fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
@@ -634,7 +684,23 @@ where
     }
 
     fn copy(&mut self, src_offset: u32, dest_offset: u32, length: u32) -> Result<(), Self::Error> {
-        todo!()
+        // Check that everything is within a single block
+        let src_block = Self::byte_to_block_index(ByteAddress::new(src_offset));
+        let final_block = Self::byte_to_block_index(ByteAddress::new(src_offset + length));
+        if src_block != final_block {
+            error!("Cannot copy slice over a block boundary");
+            return Err(Error::NotAligned);
+        }
+        // Pass copy operation to the flash device
+        self.flash
+            .copy(
+                self.logical_to_physical_byte(ByteAddress::new(src_offset))?
+                    .as_u32(),
+                self.logical_to_physical_byte(ByteAddress::new(dest_offset))?
+                    .as_u32(),
+                length,
+            )
+            .map_err(|e| Error::Flash(e))
     }
 }
 

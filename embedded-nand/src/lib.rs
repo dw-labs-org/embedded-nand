@@ -2,9 +2,10 @@
 
 mod address;
 mod fmt;
-pub mod iter;
+mod iter;
 pub mod test;
 pub use address::{AddressConversions, BlockIndex, ByteAddress, ColumnAddress, PageIndex};
+pub use iter::NandFlashIter;
 
 pub trait NandFlashError {
     /// Convert a specific NAND flash error into a generic error kind
@@ -120,24 +121,6 @@ pub trait NandFlash: ErrorType {
 
     /// Mark the block as bad
     fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
-
-    /// Iterate over block addresses
-    fn block_iter(&self, start: BlockIndex) -> iter::BlockIter {
-        iter::BlockIter {
-            block_size: Self::ERASE_SIZE as u32,
-            count: start.into(),
-            block_count: Self::BLOCK_COUNT as u16,
-        }
-    }
-
-    /// Iterate over page addresses
-    fn page_iter(&self, start: u32) -> iter::PageIter {
-        iter::PageIter {
-            page_size: Self::PAGE_SIZE as u32,
-            count: start,
-            page_count: (Self::BLOCK_COUNT * Self::ERASE_SIZE / Self::PAGE_SIZE) as u32,
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]

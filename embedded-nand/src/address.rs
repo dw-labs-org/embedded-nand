@@ -51,6 +51,14 @@ impl Display for PageIndex {
     }
 }
 
+impl Add<u32> for PageIndex {
+    type Output = Self;
+
+    fn add(self, rhs: u32) -> Self::Output {
+        PageIndex(self.0 + rhs)
+    }
+}
+
 /// Index of a block in the flash device
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -64,6 +72,10 @@ impl BlockIndex {
 
     pub fn as_u16(&self) -> u16 {
         self.0
+    }
+
+    pub fn inc(&mut self) {
+        self.0 += 1;
     }
 
     pub fn as_page_index(&self, pages_per_block: u32) -> PageIndex {
@@ -202,12 +214,14 @@ impl Display for ColumnAddress {
 pub trait AddressConversions {
     fn page_to_byte_address(page: PageIndex) -> ByteAddress;
     fn page_to_block_index(page: PageIndex) -> BlockIndex;
+    fn page_in_block(page: PageIndex) -> u32;
+    fn page_range_from_length(length: u32) -> u32;
     fn block_to_page_index(block: BlockIndex) -> PageIndex;
     fn block_to_byte_address(block: BlockIndex) -> ByteAddress;
     fn byte_to_page_index(byte: ByteAddress) -> PageIndex;
     fn byte_to_block_index(byte: ByteAddress) -> BlockIndex;
     fn byte_to_column_address(byte: ByteAddress) -> ColumnAddress;
-    fn byte_to_block_offset(byte: ByteAddress) -> u32;
+    fn byte_in_block(byte: ByteAddress) -> u32;
     fn raw_byte_to_block_index(offset: u32) -> BlockIndex;
     fn is_block_aligned(byte: ByteAddress) -> bool;
     fn is_page_aligned(byte: ByteAddress) -> bool;
@@ -219,6 +233,12 @@ impl<T: NandFlash> AddressConversions for T {
     }
     fn page_to_block_index(page: PageIndex) -> BlockIndex {
         page.as_block_index(Self::PAGES_PER_BLOCK as u32)
+    }
+    fn page_in_block(page: PageIndex) -> u32 {
+        page.0 % Self::PAGES_PER_BLOCK as u32
+    }
+    fn page_range_from_length(length: u32) -> u32 {
+        length / Self::PAGE_SIZE as u32
     }
     fn block_to_page_index(block: BlockIndex) -> PageIndex {
         block.as_page_index(Self::PAGES_PER_BLOCK as u32)
@@ -235,7 +255,7 @@ impl<T: NandFlash> AddressConversions for T {
     fn byte_to_column_address(byte: ByteAddress) -> ColumnAddress {
         byte.as_column_address(Self::PAGE_SIZE as u32)
     }
-    fn byte_to_block_offset(byte: ByteAddress) -> u32 {
+    fn byte_in_block(byte: ByteAddress) -> u32 {
         byte.block_offset(Self::ERASE_SIZE as u32)
     }
     fn raw_byte_to_block_index(offset: u32) -> BlockIndex {

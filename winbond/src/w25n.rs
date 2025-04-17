@@ -5,10 +5,6 @@ use spi_flash::{
     JedecID, SpiNand,
 };
 
-trait E {
-    const VAR: u32;
-}
-
 /// Concrete type that implements all the flash device features
 pub struct W25N<const B: u32>();
 
@@ -29,10 +25,6 @@ impl<const B: u32> Default for W25N<B> {
     fn default() -> Self {
         Self::new()
     }
-}
-
-impl E for W25N<2048> {
-    const VAR: u32 = 6;
 }
 
 impl<const B: u32> SpiNand<2048> for W25N<B> {
