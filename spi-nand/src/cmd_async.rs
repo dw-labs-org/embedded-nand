@@ -31,7 +31,8 @@ pub trait SpiNandAsync<SPI: SpiDevice, const N: usize>: SpiNand<N> {
 
     /// Issue a hard reset command to the flash device
     async fn hard_reset_cmd(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI::Error>> {
-        spi_write(spi, &[Self::RESET_ENABLE_COMMAND, Self::HARD_RESET_COMMAND]).await
+        spi_write(spi, &[Self::RESET_ENABLE_COMMAND]).await?;
+        spi_write(spi, &[Self::HARD_RESET_COMMAND]).await
     }
 
     /// Read the JEDEC ID of the flash device
