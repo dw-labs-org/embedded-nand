@@ -26,6 +26,11 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         spi_write(spi, &[Self::RESET_COMMAND])
     }
 
+    /// Issue a hard reset command to the flash device
+    fn hard_reset_cmd(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI::Error>> {
+        spi_write(spi, &[Self::RESET_ENABLE_COMMAND, Self::HARD_RESET_COMMAND])
+    }
+
     /// Read the JEDEC ID of the flash device
     /// command then byte then ID then 2 device ID bytes    
     fn read_jedec_id_cmd(&self, spi: &mut SPI) -> Result<JedecID, SpiFlashError<SPI::Error>> {
@@ -80,7 +85,9 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         mask: u8,
     ) -> Result<(), SpiFlashError<SPI::Error>> {
         let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, register, 0];
+        trace!("buf: {}", buf);
         spi_transfer_in_place(spi, &mut buf)?;
+        trace!("buf: {}", buf);
         buf[2] &= !mask;
         buf[0] = Self::STATUS_REGISTER_WRITE_COMMAND;
         spi_write(spi, &buf)
