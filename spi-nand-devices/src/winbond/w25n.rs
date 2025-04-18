@@ -7,21 +7,113 @@ use spi_nand::SpiNand;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct W25N<const B: u32, const ID: u16>();
 
-/// Specific flash device with block count and ID and features
+// Specific flash devices with block count, ID and features
+
+/// W25N512G(V/W)
 pub type W25N512G = W25N<512, 0xAA20>;
 impl ECCBasic for W25N512G {}
 impl ODS for W25N512G {}
 impl HoldDisable for W25N512G {}
-impl ContinuousRead for W25N512G {}
-impl BBM for W25N512G {}
+impl BBM<10> for W25N512G {}
 
+/// W25N01GV
 pub type W25N01GV = W25N<1024, 0xAA21>;
-pub type W25N01JW = W25N<1024, 0xBC21>;
-pub type W25N01KW = W25N<1024, 0xBC21>;
-pub type W25N01KV = W25N<1024, 0xAE21>;
+impl ECCBasic for W25N01GV {}
+impl BBM<20> for W25N01GV {}
 
+/// W25N01GW
+pub type W25N01GW = W25N<1024, 0xBA21>;
+impl ECCBasic for W25N01GW {}
+impl BBM<20> for W25N01GW {}
+impl ODS for W25N01GW {}
+
+/// W25N01JW
+pub type W25N01JW = W25N<1024, 0xBC21>;
+impl ECCBasic for W25N01JW {}
+impl BBM<20> for W25N01JW {}
+impl ODS for W25N01JW {
+    const ODS_REGISTER: u8 = 0xD0;
+    const ODS_BIT: u8 = 5;
+}
+
+/// W25N01KV
+pub type W25N01KV = W25N<1024, 0xAE21>;
+impl ODS for W25N01KV {}
+impl HoldDisable for W25N01KV {}
+// TODO: This is 4 bit ECC not 8 bit
+impl ECC for W25N01KV {}
+
+/// W25N01KW
+pub type W25N01KW = W25N<1024, 0xBE21>;
+impl ODS for W25N01KW {}
+impl HoldDisable for W25N01KW {}
+// TODO: This is 4 bit ECC not 8 bit
+impl ECC for W25N01KW {}
+impl BBM<20> for W25N01KW {}
+
+/// W25N02JW
+pub type W25N02JW = W25N<2048, 0xBF22>;
+impl BBM<40> for W25N02JW {}
+impl ECCBasic for W25N02JW {}
+impl ODS for W25N02JW {
+    const ODS_REGISTER: u8 = 0xD0;
+    const ODS_BIT: u8 = 5;
+}
+
+/// W25N02KV
 pub type W25N02KV = W25N<2048, 0xAA22>;
 impl ECC for W25N02KV {}
+
+/// W25N02KW
+pub type W25N02KW = W25N<2048, 0xBA22>;
+impl ODS for W25N02KW {}
+impl HoldDisable for W25N02KW {}
+impl ECC for W25N02KW {}
+
+/// W25N04KV
+pub type W25N04KV = W25N<4096, 0xAA23>;
+impl ECC for W25N04KV {}
+impl ODS for W25N04KV {}
+impl HoldDisable for W25N04KV {}
+
+/// W25N04KW
+pub type W25N04KW = W25N<4096, 0xBA23>;
+impl ODS for W25N04KW {}
+impl HoldDisable for W25N04KW {}
+impl ECC for W25N04KW {}
+
+/// W25N04LW.
+///
+/// This is a special case as the page size is 4096 bytes
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct W25N04LW;
+impl HoldDisable for W25N04LW {}
+impl BBM<40> for W25N04LW {}
+// TODO: Slightly different to standard ECC
+impl ECC for W25N04LW {}
+impl ODS for W25N04LW {
+    const ODS_REGISTER: u8 = 0xD0;
+    const ODS_BIT: u8 = 5;
+}
+
+impl SpiNand<4096> for W25N04LW {
+    const PAGE_SIZE: u32 = 4096;
+    const PAGES_PER_BLOCK: u32 = 64;
+    const BLOCK_COUNT: u32 = 2048;
+    const READ_SIZE: u32 = 1;
+
+    const JEDEC_MANUFACTURER_ID: u8 = 0xEF;
+    const JEDEC_DEVICE_ID: u16 = 0xB223;
+}
+
+impl W25N04LW {
+    /// Creates a new instance of the W25N flash device.
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl<const B: u32, const ID: u16> W25N<B, ID> {
     /// Creates a new instance of the W25N flash device.
@@ -89,16 +181,9 @@ trait HoldDisable {
     const HOLD_DISABLE_BIT: u8 = 0;
 }
 
-/// Continuous read
-trait ContinuousRead {
-    // Register of 1 bit
-    const CONTINUOUS_READ_REGISTER: u8 = 0xB0;
-    // Position of BUF bit
-    const CONTINUOUS_READ_BIT: u8 = 3;
-}
-
 /// Bad block managment with loookup table
-trait BBM {
+/// LUT is the size of the lookup table
+trait BBM<const LUT: usize> {
     // Command to swap block
     const SWAP_BLOCK_COMMAND: u8 = 0xA1;
     // Command to read LUT
@@ -159,7 +244,7 @@ impl From<u8> for ODSStrength {
 
 // Implement blocking trait
 mod blocking {
-    use super::{ECCBasic, ECCThreshold, ODSStrength, BBM, ECC, ODS, W25N};
+    use super::{ECCBasic, ECCThreshold, ODSStrength, BBM, ECC, ODS, W25N, W25N04LW};
     use embedded_hal::spi::SpiDevice;
     use embedded_nand::{BlockIndex, PageIndex};
     use spi_nand::{
@@ -265,6 +350,7 @@ mod blocking {
         }
     }
 
+    /// For W25N that implement the output driver strength configuration
     pub trait ODSBlocking<SPI: SpiDevice, const N: usize>: ODS + SpiNandBlocking<SPI, N> {
         /// Set the output driver strength
         fn set_output_driver_strength(
@@ -285,7 +371,10 @@ mod blocking {
         }
     }
 
-    pub trait BBMBlocking<SPI: SpiDevice, const N: usize>: BBM + SpiNandBlocking<SPI, N> {
+    /// For W25N that implement the bad block management lookup table (LUT)
+    pub trait BBMBlocking<SPI: SpiDevice, const N: usize, const LUT: usize>:
+        BBM<LUT> + SpiNandBlocking<SPI, N>
+    {
         /// Check if the LUT is full
         fn is_lut_full(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI::Error>> {
             let status = self.read_register_cmd(spi, Self::LUT_FULL_REGISTER)?;
@@ -296,14 +385,14 @@ mod blocking {
         fn read_lut_cmd(
             &self,
             spi: &mut SPI,
-        ) -> Result<[(BlockIndex, BlockIndex); 10], SpiFlashError<SPI::Error>> {
-            // 42 bytes, first byte is command, 2nd is dummy
-            // 10 * u16 block pairs
-            let mut buf = [0; 42];
+        ) -> Result<[(BlockIndex, BlockIndex); LUT], SpiFlashError<SPI::Error>> {
+            // This reads 40 blocks. Ideally would be configured by LUT
+            let mut buf = [0; 162];
             buf[0] = Self::READ_LUT_COMMAND;
             spi_transfer_in_place(spi, &mut buf)?;
-            let mut lut: [(BlockIndex, BlockIndex); 10] = Default::default();
-            for (i, chunk) in buf[2..].chunks_exact(4).enumerate() {
+            let mut lut: [(BlockIndex, BlockIndex); LUT] =
+                [(BlockIndex::new(0), BlockIndex::new(0)); LUT];
+            for (i, chunk) in buf[2..].chunks_exact(4).enumerate().take(LUT) {
                 let block = u16::from_be_bytes([chunk[0], chunk[1]]);
                 let swap = u16::from_be_bytes([chunk[2], chunk[3]]);
                 lut[i] = (BlockIndex::new(block), BlockIndex::new(swap));
@@ -334,9 +423,18 @@ mod blocking {
     // Implement ODSBlocking for ODS devices
     impl<SPI: SpiDevice, const N: usize, T: ODS + SpiNandBlocking<SPI, N>> ODSBlocking<SPI, N> for T {}
     // Implement BBMBlocking for BBM devices
-    impl<SPI: SpiDevice, const N: usize, T: BBM + SpiNandBlocking<SPI, N>> BBMBlocking<SPI, N> for T {}
+    impl<
+            SPI: SpiDevice,
+            const N: usize,
+            const LUT: usize,
+            T: BBM<LUT> + SpiNandBlocking<SPI, N>,
+        > BBMBlocking<SPI, N, LUT> for T
+    {
+    }
 
     impl<SPI: SpiDevice, const B: u32, const ID: u16> SpiNandBlocking<SPI, 2048> for W25N<B, ID> {}
+
+    impl<SPI: SpiDevice> SpiNandBlocking<SPI, 4096> for W25N04LW {}
 }
 
 // Implement async trait
@@ -354,12 +452,16 @@ mod asyn {
 mod tests {
     use super::blocking::BBMBlocking;
     use super::blocking::ECCBasicBlocking;
+    use super::blocking::ECCBlocking;
     use super::blocking::ODSBlocking;
+    use super::W25N04LW;
     use super::W25N512G;
 
     #[test]
     fn features() {
         let device = W25N512G::new();
+        let other = W25N04LW::new();
+
         // device.
         // device
         //     .set_output_driver_strength(spi, super::ODSStrength::Full)
