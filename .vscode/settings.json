@@ -1,6 +1,11 @@
 {
   "rust-analyzer.linkedProjects": [
-
-    "embedded-nand/Cargo.toml", "embedded-nand-async/Cargo.toml", "spi-flash/Cargo.toml", "winbond/Cargo.toml"
-  ]
+    "embedded-nand/Cargo.toml",
+    "embedded-nand-async/Cargo.toml",
+    "spi-nand/Cargo.toml",
+    "spi-nand-devices/Cargo.toml",
+    "flashmap/Cargo.toml",
+    "examples/Cargo.toml"
+  ],
+  "rust-analyzer.check.allTargets": false
 }

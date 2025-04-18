@@ -3,5 +3,12 @@
 version = 4
 
 [[package]]
+name = "embedded-nand"
+version = "0.1.0"
+
+[[package]]
 name = "embedded-nand-async"
 version = "0.1.0"
+dependencies = [
+ "embedded-nand",
+]

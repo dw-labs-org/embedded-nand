@@ -1,11 +1,13 @@
 #![no_std]
+#![allow(async_fn_in_trait)]
+
+use embedded_nand::{BlockIndex, BlockStatus};
 
 mod address;
 mod fmt;
-mod iter;
-pub mod test;
-pub use address::{AddressConversions, BlockIndex, ByteAddress, ColumnAddress, PageIndex};
-pub use iter::NandFlashIter;
+pub mod iter;
+
+pub use address::AddressConversions;
 
 pub trait NandFlashError: core::fmt::Debug {
     /// Convert a specific NAND flash error into a generic error kind
@@ -71,16 +73,16 @@ pub trait NandFlash: ErrorType {
     /// Returns an error if the arguments are not aligned or out of bounds. The implementation
     /// can use the [`check_read`] helper function.
     ///
-    fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error>;
+    async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error>;
 
     /// The capacity of the peripheral in bytes.
     fn capacity(&self) -> u32;
 
     /// Mark the block as bad
-    fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
+    async fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
 
     /// Check status of block according to bad block marker and ECC / Checksum status
-    fn block_status(&mut self, block: BlockIndex) -> Result<BlockStatus, Self::Error>;
+    async fn block_status(&mut self, block: BlockIndex) -> Result<BlockStatus, Self::Error>;
 
     /// Erase the given storage range, clearing all data within `[from..to]`.
     /// The given range will contain all 1s afterwards.
@@ -92,10 +94,10 @@ pub trait NandFlash: ErrorType {
     /// Returns an error if the arguments are not aligned or out of bounds (the case where `to >
     /// from` is considered out of bounds). The implementation can use the [`check_erase`]
     /// helper function.
-    fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error>;
+    async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error>;
 
     /// Erase a block by block index.
-    fn erase_block(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
+    async fn erase_block(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
 
     /// If power is lost during write, the contents of the written words are undefined,
     /// but the rest of the page is guaranteed to be unchanged.
@@ -105,35 +107,19 @@ pub trait NandFlash: ErrorType {
     ///
     /// Returns an error if the arguments are not aligned or out of bounds. The implementation
     /// can use the [`check_write`] helper function.
-    fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error>;
+    async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error>;
 
     /// Copy data from one location to another.
     ///
     /// Some devices support internal copy commands, which are faster than
     /// reading and writing the data. This function should be used to
     /// implement the copy command.
-    fn copy(&mut self, src_offset: u32, dest_offset: u32, length: u32) -> Result<(), Self::Error>;
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[non_exhaustive]
-pub enum BlockStatus {
-    /// Marked OK and passes ECC / Checksum
-    Ok,
-    /// Marked as failed or failed ECC / Checksum
-    Failed,
-}
-
-impl BlockStatus {
-    /// Return true if the block is marked as failed
-    pub fn is_failed(&self) -> bool {
-        matches!(self, BlockStatus::Failed)
-    }
-
-    /// Return true if the block is marked as OK
-    pub fn is_ok(&self) -> bool {
-        matches!(self, BlockStatus::Ok)
-    }
+    async fn copy(
+        &mut self,
+        src_offset: u32,
+        dest_offset: u32,
+        length: u32,
+    ) -> Result<(), Self::Error>;
 }
 
 /// Return whether a read operation is within bounds.

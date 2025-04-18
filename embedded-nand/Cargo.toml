@@ -4,4 +4,20 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-defmt = "0.3.10"
+defmt = { version = "0.3", optional = true }
+log = { version = "0.4.27", optional = true }
+serde = { version = "1", optional = true, default-features = false, features = [
+    "derive",
+] }
+
+
+[features]
+# Only enable this when developing the library. Useful for syntax highlighting.
+# default = ["defmt", "serde"]
+defmt = ["dep:defmt"]
+serde = ["dep:serde"]
+log = ["dep:log"]
+
+[dev-dependencies]
+env_logger = "0.11.8"
+test-log = { version = "0.2.16", features = ["color"] }
