@@ -43,7 +43,7 @@ pub enum NandFlashErrorKind {
     Other,
 }
 
-/// Read only NAND flash trait.
+/// NAND flash trait.
 pub trait NandFlash: ErrorType {
     /// The minumum number of bytes the storage peripheral can read
     const READ_SIZE: usize;
@@ -76,10 +76,13 @@ pub trait NandFlash: ErrorType {
     /// The capacity of the peripheral in bytes.
     fn capacity(&self) -> u32;
 
+    /// Mark the block as bad
+    fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
+
     /// Check status of block according to bad block marker and ECC / Checksum status
     fn block_status(&mut self, block: BlockIndex) -> Result<BlockStatus, Self::Error>;
 
-    /// Check if the block is marked as bad
+    /// Check if the block has failed
     fn block_is_bad(&mut self, block: BlockIndex) -> Result<bool, Self::Error> {
         match self.block_status(block)? {
             BlockStatus::Failed => Ok(true),
@@ -118,9 +121,6 @@ pub trait NandFlash: ErrorType {
     /// reading and writing the data. This function should be used to
     /// implement the copy command.
     fn copy(&mut self, src_offset: u32, dest_offset: u32, length: u32) -> Result<(), Self::Error>;
-
-    /// Mark the block as bad
-    fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
