@@ -136,10 +136,11 @@ where
                 block_address.as_u32()
             );
             // check if block is good
-            if !flashmap
+            if flashmap
                 .flash
-                .block_is_bad(block_ind)
+                .block_status(block_ind)
                 .map_err(|e| Error::Flash(e))?
+                .is_ok()
             {
                 map_blocks[count] = block_ind;
                 count += 1;
@@ -197,10 +198,11 @@ where
         let mut final_block = None;
         for (block_ind, _) in flashmap.flash.block_iter_from(first_block) {
             // Check if the block is good
-            if !flashmap
+            if flashmap
                 .flash
-                .block_is_bad(block_ind)
+                .block_status(block_ind)
                 .map_err(|e| Error::Flash(e))?
+                .is_ok()
             {
                 // Record logical to physical mapping
                 flashmap.data.map[logical_ind] = block_ind;
@@ -426,10 +428,11 @@ where
                 return Err(Error::NotEnoughValidBlocks);
             }
             // Check if the block is good
-            if !self
+            if self
                 .flash
-                .block_is_bad(self.data.header.final_block)
+                .block_status(self.data.header.final_block)
                 .map_err(|e| Error::Flash(e))?
+                .is_ok()
                 && self.flash.erase_block(self.data.header.final_block).is_ok()
             {
                 return Ok(self.data.header.final_block);

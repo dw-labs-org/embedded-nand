@@ -82,14 +82,6 @@ pub trait NandFlash: ErrorType {
     /// Check status of block according to bad block marker and ECC / Checksum status
     fn block_status(&mut self, block: BlockIndex) -> Result<BlockStatus, Self::Error>;
 
-    /// Check if the block has failed
-    fn block_is_bad(&mut self, block: BlockIndex) -> Result<bool, Self::Error> {
-        match self.block_status(block)? {
-            BlockStatus::Failed => Ok(true),
-            _ => Ok(false),
-        }
-    }
-
     /// Erase the given storage range, clearing all data within `[from..to]`.
     /// The given range will contain all 1s afterwards.
     ///
@@ -130,6 +122,18 @@ pub enum BlockStatus {
     Ok,
     /// Marked as failed or failed ECC / Checksum
     Failed,
+}
+
+impl BlockStatus {
+    /// Return true if the block is marked as failed
+    pub fn is_failed(&self) -> bool {
+        matches!(self, BlockStatus::Failed)
+    }
+
+    /// Return true if the block is marked as OK
+    pub fn is_ok(&self) -> bool {
+        matches!(self, BlockStatus::Ok)
+    }
 }
 
 /// Return whether a read operation is within bounds.
