@@ -41,6 +41,10 @@ pub trait SpiNand<const N: usize> {
     // Commands
     /// The command to reset the flash device
     const RESET_COMMAND: u8 = 0xFF;
+    /// Commmand to enable reset
+    const RESET_ENABLE_COMMAND: u8 = 0x66;
+    /// Command to hard reset
+    const HARD_RESET_COMMAND: u8 = 0x99;
     /// The command to read the JEDEC ID of the flash device
     const JEDEC_COMMAND: u8 = 0x9F;
     /// Command to read the status register

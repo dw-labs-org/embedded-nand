@@ -68,7 +68,7 @@ impl<SPI: SpiDevice, D: SpiNandBlocking<SPI, N>, const N: usize> SpiNandDevice<S
 
     /// Reset the flash device using blocking SPI
     pub fn reset_blocking(&mut self) -> Result<(), SpiFlashError<SPI::Error>> {
-        self.device.reset_cmd(&mut self.spi)
+        self.device.hard_reset_cmd(&mut self.spi)
     }
     /// Erase a block of flash memory using blocking SPI
     pub fn erase_block_blocking(

@@ -63,6 +63,8 @@ impl ODS for W25N02JW {
 /// W25N02KV
 pub type W25N02KV = W25N<2048, 0xAA22>;
 impl ECC for W25N02KV {}
+impl ODS for W25N02KV {}
+impl HoldDisable for W25N02KV {}
 
 /// W25N02KW
 pub type W25N02KW = W25N<2048, 0xBA22>;
@@ -138,7 +140,7 @@ impl<const B: u32, const ID: u16> SpiNand<2048> for W25N<B, ID> {
 // ================== Feature traits ==================
 
 /// For devices that implement Basic ECC. (single bit correction)
-trait ECCBasic {
+pub trait ECCBasic {
     // Register of 1 bit
     const ECC_ENABLE_REGISTER: u8 = 0xB0;
     // Position of lsb
@@ -152,7 +154,7 @@ trait ECCBasic {
 }
 
 /// For devices that implement ECC with configurable threshold (W25N512G)
-trait ECC {
+pub trait ECC {
     /// Located in register 2
     const ECC_ENABLE_REGISTER: u8 = 0xB0;
     /// bit 4
@@ -166,7 +168,7 @@ trait ECC {
 }
 
 /// Configurable output driver strength
-trait ODS {
+pub trait ODS {
     // Register of 2 bits
     const ODS_REGISTER: u8 = 0xB0;
     // Position of lsb
@@ -174,7 +176,7 @@ trait ODS {
 }
 
 /// Hold disable
-trait HoldDisable {
+pub trait HoldDisable {
     // Register of 1 bit
     const HOLD_DISABLE_REGISTER: u8 = 0xB0;
     // Position of lsb
@@ -183,7 +185,7 @@ trait HoldDisable {
 
 /// Bad block managment with loookup table
 /// LUT is the size of the lookup table
-trait BBM<const LUT: usize> {
+pub trait BBM<const LUT: usize> {
     // Command to swap block
     const SWAP_BLOCK_COMMAND: u8 = 0xA1;
     // Command to read LUT
@@ -198,7 +200,7 @@ trait BBM<const LUT: usize> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-enum ECCThreshold {
+pub enum ECCThreshold {
     /// 1 bit
     OneBit = 0b0001,
     /// 2 bits
@@ -215,11 +217,26 @@ enum ECCThreshold {
     SevenBits = 0b0111,
 }
 
+impl From<u8> for ECCThreshold {
+    fn from(value: u8) -> Self {
+        match value {
+            0b0001 => ECCThreshold::OneBit,
+            0b0010 => ECCThreshold::TwoBits,
+            0b0011 => ECCThreshold::ThreeBits,
+            0b0100 => ECCThreshold::FourBits,
+            0b0101 => ECCThreshold::FiveBits,
+            0b0110 => ECCThreshold::SixBits,
+            0b0111 => ECCThreshold::SevenBits,
+            _ => panic!("Invalid ECC threshold value"),
+        }
+    }
+}
+
 /// Output driver strength
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-enum ODSStrength {
+pub enum ODSStrength {
     /// 100%
     Full = 0b00,
     /// 75%
@@ -243,7 +260,7 @@ impl From<u8> for ODSStrength {
 }
 
 // Implement blocking trait
-mod blocking {
+pub mod blocking {
     use super::{ECCBasic, ECCThreshold, ODSStrength, BBM, ECC, ODS, W25N, W25N04LW};
     use embedded_hal::spi::SpiDevice;
     use embedded_nand::{BlockIndex, PageIndex};
@@ -317,8 +334,11 @@ mod blocking {
             }
         }
         /// Get the bit flip detect threshold (1 to 7 bits)
-        fn ecc_bit_flip_threshold(&self, spi: &mut SPI) -> Result<u8, SpiFlashError<SPI::Error>> {
-            Ok(self.read_register_cmd(spi, Self::ECC_EXTENDED_REGISTERS[0])? >> 4)
+        fn ecc_bit_flip_threshold(
+            &self,
+            spi: &mut SPI,
+        ) -> Result<ECCThreshold, SpiFlashError<SPI::Error>> {
+            Ok((self.read_register_cmd(spi, Self::ECC_EXTENDED_REGISTERS[0])? >> 4).into())
         }
 
         /// Set the bit flip detect threshold (1 to 7 bits)
@@ -362,7 +382,7 @@ mod blocking {
         }
 
         /// Get the output driver strength
-        fn get_output_driver_strength<SpiDevice>(
+        fn get_output_driver_strength(
             &self,
             spi: &mut SPI,
         ) -> Result<ODSStrength, SpiFlashError<SPI::Error>> {
@@ -523,11 +543,12 @@ mod asyn {
         async fn ecc_bit_flip_threshold(
             &self,
             spi: &mut SPI,
-        ) -> Result<u8, SpiFlashError<SPI::Error>> {
-            Ok(self
+        ) -> Result<ECCThreshold, SpiFlashError<SPI::Error>> {
+            Ok((self
                 .read_register_cmd(spi, Self::ECC_EXTENDED_REGISTERS[0])
                 .await?
                 >> 4)
+                .into())
         }
 
         /// Set the bit flip detect threshold (1 to 7 bits)

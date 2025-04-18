@@ -10,36 +10,9 @@ use embassy_stm32::gpio::Output;
 
 use flashmap::FlashMap;
 use spi_nand::{SpiNand, SpiNandDevice};
-use spi_nand_devices::winbond::w25n::W25N02K;
+use spi_nand_devices::winbond::w25n::W25N02KV;
 
 use {defmt_rtt as _, panic_probe as _}; // global logger
-
-// same panicking *behavior* as `panic-probe` but doesn't print a panic message
-// this prevents the panic message being printed *twice* when `defmt::panic` is invoked
-#[defmt::panic_handler]
-fn panic() -> ! {
-    cortex_m::asm::udf()
-}
-
-/// Terminates the application and makes a semihosting-capable debug tool exit
-/// with status code 0.
-pub fn exit() -> ! {
-    loop {
-        debug::exit(debug::EXIT_SUCCESS);
-    }
-}
-
-/// Hardfault handler.
-///
-/// Terminates the application and makes a semihosting-capable debug tool exit
-/// with an error. This seems better than the default, which is to spin in a
-/// loop.
-#[cortex_m_rt::exception]
-unsafe fn HardFault(_frame: &cortex_m_rt::ExceptionFrame) -> ! {
-    loop {
-        debug::exit(debug::EXIT_FAILURE);
-    }
-}
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -73,8 +46,8 @@ async fn main(spawner: Spawner) {
             .unwrap();
 
     // Create [spi_flash::device::SpiFlash] instance
-    let device = W25N02K::new();
-    let b = <W25N02K as SpiNand<2048>>::BLOCK_COUNT;
+    let device = W25N02KV::new();
+    let b = <W25N02KV as SpiNand<2048>>::BLOCK_COUNT;
 
     let mut flash = SpiNandDevice::new(spi_dev, device);
 
