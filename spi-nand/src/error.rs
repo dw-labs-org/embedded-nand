@@ -68,3 +68,36 @@ impl<SE> From<NandFlashErrorKind> for SpiFlashError<SE> {
         }
     }
 }
+
+mod asyn {
+    use embedded_nand_async::{NandFlashError, NandFlashErrorKind};
+
+    use super::SpiFlashError;
+
+    // Convert from SPI error to more generic NandFlashError
+    impl<SE: core::fmt::Debug> NandFlashError for SpiFlashError<SE> {
+        fn kind(&self) -> embedded_nand_async::NandFlashErrorKind {
+            match self {
+                SpiFlashError::NotAligned => NandFlashErrorKind::NotAligned,
+                SpiFlashError::OutOfBounds => NandFlashErrorKind::OutOfBounds,
+                SpiFlashError::SPI(_) => NandFlashErrorKind::Other,
+                SpiFlashError::EraseFailed => NandFlashErrorKind::BlockFail(None),
+                SpiFlashError::ProgramFailed => NandFlashErrorKind::BlockFail(None),
+                SpiFlashError::ReadFailed => NandFlashErrorKind::BlockFail(None),
+                SpiFlashError::EccError => NandFlashErrorKind::BlockFailing(None),
+                SpiFlashError::Other => NandFlashErrorKind::Other,
+            }
+        }
+    }
+
+    // This impl is only for the helper check bounds / alignment functions for auto conversion from errors
+    impl<SE> From<NandFlashErrorKind> for SpiFlashError<SE> {
+        fn from(kind: NandFlashErrorKind) -> Self {
+            match kind {
+                NandFlashErrorKind::NotAligned => SpiFlashError::NotAligned,
+                NandFlashErrorKind::OutOfBounds => SpiFlashError::OutOfBounds,
+                _ => SpiFlashError::Other,
+            }
+        }
+    }
+}

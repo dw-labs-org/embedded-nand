@@ -501,6 +501,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-nand-async"
+version = "0.1.0"
+dependencies = [
+ "embedded-nand",
+]
+
+[[package]]
 name = "embedded-storage"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -750,6 +757,7 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "embedded-nand",
+ "embedded-nand-async",
  "thiserror",
 ]
 

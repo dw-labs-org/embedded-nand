@@ -76,7 +76,7 @@ pub trait NandFlash: ErrorType {
     async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error>;
 
     /// The capacity of the peripheral in bytes.
-    async fn capacity(&self) -> u32;
+    fn capacity(&self) -> u32;
 
     /// Mark the block as bad
     async fn mark_block_bad(&mut self, block: BlockIndex) -> Result<(), Self::Error>;
@@ -120,4 +120,48 @@ pub trait NandFlash: ErrorType {
         dest_offset: u32,
         length: u32,
     ) -> Result<(), Self::Error>;
+}
+
+/// Return whether a read operation is within bounds.
+pub fn check_read<T: NandFlash>(
+    flash: &T,
+    offset: u32,
+    length: usize,
+) -> Result<(), NandFlashErrorKind> {
+    check_slice(flash, T::READ_SIZE, offset, length)
+}
+
+/// Return whether an erase operation is aligned and within bounds.
+pub fn check_erase<T: NandFlash>(flash: &T, from: u32, to: u32) -> Result<(), NandFlashErrorKind> {
+    if from > to || to > flash.capacity() {
+        return Err(NandFlashErrorKind::OutOfBounds);
+    }
+    if from % T::ERASE_SIZE as u32 != 0 || to % T::ERASE_SIZE as u32 != 0 {
+        return Err(NandFlashErrorKind::NotAligned);
+    }
+    Ok(())
+}
+
+/// Return whether a write operation is aligned and within bounds.
+pub fn check_write<T: NandFlash>(
+    flash: &T,
+    offset: u32,
+    length: usize,
+) -> Result<(), NandFlashErrorKind> {
+    check_slice(flash, T::WRITE_SIZE, offset, length)
+}
+
+pub fn check_slice<T: NandFlash>(
+    flash: &T,
+    align: usize,
+    offset: u32,
+    length: usize,
+) -> Result<(), NandFlashErrorKind> {
+    if length as u32 > flash.capacity() || offset > (flash.capacity() - (length as u32)) {
+        return Err(NandFlashErrorKind::OutOfBounds);
+    }
+    if offset % align as u32 != 0 || length % align != 0 {
+        return Err(NandFlashErrorKind::NotAligned);
+    }
+    Ok(())
 }
