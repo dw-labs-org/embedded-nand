@@ -2,7 +2,7 @@ use embedded_hal::spi::{Operation, SpiDevice};
 use embedded_nand::{BlockIndex, ColumnAddress, PageIndex};
 use utils::{spi_transaction, spi_transfer_in_place, spi_write};
 
-use crate::{error::SpiFlashError, ECCStatus, JedecID, SpiNand};
+use crate::{error::SpiFlashError, JedecID, SpiNand};
 
 /// Blocking SPI NAND flash trait.
 /// Contains the low level, mostly single SPI operation commands.
