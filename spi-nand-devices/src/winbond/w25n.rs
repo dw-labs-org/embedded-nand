@@ -439,13 +439,216 @@ mod blocking {
 
 // Implement async trait
 mod asyn {
-    use super::W25N;
-    use spi_nand::cmd_async::SpiNandAsync;
+    use super::{ECCBasic, ECCThreshold, ODSStrength, BBM, ECC, ODS, W25N, W25N04LW};
+    use embedded_hal_async::spi::SpiDevice;
+    use embedded_nand::{BlockIndex, PageIndex};
+    use spi_nand::{
+        cmd_async::{
+            utils::{spi_transfer_in_place, spi_write},
+            SpiNandAsync,
+        },
+        error::SpiFlashError,
+        ECCStatus,
+    };
+
+    /// For W25N that implement the basic ECC
+    pub trait ECCBasicAsync<SPI: SpiDevice, const N: usize>:
+        SpiNandAsync<SPI, N> + ECCBasic
+    {
+        /// Enable ECC
+        async fn enable_ecc(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI::Error>> {
+            self.set_register_cmd(spi, Self::ECC_ENABLE_REGISTER, Self::ECC_ENABLE_BIT)
+                .await
+        }
+        /// Disable ECC
+        async fn disable_ecc(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI::Error>> {
+            self.clear_register_cmd(spi, Self::ECC_ENABLE_REGISTER, Self::ECC_ENABLE_BIT)
+                .await
+        }
+        /// Read the ECC status bits        
+        async fn ecc_status(&self, spi: &mut SPI) -> Result<ECCStatus, SpiFlashError<SPI::Error>> {
+            let status = (self
+                .read_register_cmd(spi, Self::ECC_STATUS_REGISTER)
+                .await?
+                >> Self::ECC_STATUS_BIT)
+                & 0b11;
+            match status {
+                0b00 => Ok(ECCStatus::Ok),
+                0b01 => Ok(ECCStatus::Corrected),
+                0b10 => Ok(ECCStatus::Failed),
+                // Can only happen in continuous read mode
+                _ => Ok(ECCStatus::Failed),
+            }
+        }
+
+        /// Get the last ECC page failure. Only applicable in continuous read mode
+        async fn ecc_last_page_failure(
+            &self,
+            spi: &mut SPI,
+        ) -> Result<PageIndex, SpiFlashError<SPI::Error>> {
+            let mut buf = [Self::ECC_PAGE_FAILURE_COMMAND, 0, 0, 0];
+            spi_transfer_in_place(spi, &mut buf).await?;
+            // contruct page index from bytes
+            Ok(PageIndex::from(&buf[1..].try_into().unwrap()))
+        }
+    }
+
+    /// For W25N that implement the more advanced ECC
+    pub trait ECCAsync<SPI: SpiDevice, const N: usize>: SpiNandAsync<SPI, N> + ECC {
+        /// Enable ECC
+        async fn enable_ecc(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI::Error>> {
+            self.set_register_cmd(spi, Self::ECC_ENABLE_REGISTER, Self::ECC_ENABLE_MASK)
+                .await
+        }
+        /// Disable ECC
+        async fn disable_ecc(&self, spi: &mut SPI) -> Result<(), SpiFlashError<SPI::Error>> {
+            self.clear_register_cmd(spi, Self::ECC_ENABLE_REGISTER, Self::ECC_ENABLE_MASK)
+                .await
+        }
+        /// Read the ECC status bits        
+        async fn ecc_status(&self, spi: &mut SPI) -> Result<ECCStatus, SpiFlashError<SPI::Error>> {
+            let status = (self
+                .read_register_cmd(spi, Self::ECC_STATUS_REGISTER)
+                .await?
+                >> Self::ECC_STATUS_BIT)
+                & 0b11;
+            match status {
+                0b00 => Ok(ECCStatus::Ok),
+                0b01 => Ok(ECCStatus::Corrected),
+                0b10 => Ok(ECCStatus::Failed),
+                _ => Ok(ECCStatus::Failing),
+            }
+        }
+        /// Get the bit flip detect threshold (1 to 7 bits)
+        async fn ecc_bit_flip_threshold(
+            &self,
+            spi: &mut SPI,
+        ) -> Result<u8, SpiFlashError<SPI::Error>> {
+            Ok(self
+                .read_register_cmd(spi, Self::ECC_EXTENDED_REGISTERS[0])
+                .await?
+                >> 4)
+        }
+
+        /// Set the bit flip detect threshold (1 to 7 bits)
+        async fn ecc_set_bit_flip_threshold(
+            &self,
+            spi: &mut SPI,
+            threshold: ECCThreshold,
+        ) -> Result<(), SpiFlashError<SPI::Error>> {
+            self.write_register_cmd(spi, Self::ECC_EXTENDED_REGISTERS[0], (threshold as u8) << 4)
+                .await
+        }
+
+        /// Get the bit flip count detection status (BFS3->BFS0)
+        async fn ecc_bit_flip_count_status(
+            &self,
+            spi: &mut SPI,
+        ) -> Result<u8, SpiFlashError<SPI::Error>> {
+            self.read_register_cmd(spi, Self::ECC_EXTENDED_REGISTERS[1])
+                .await
+        }
+
+        /// Get the bit flip count report (BFR15->BFR0)
+        async fn ecc_bit_flip_count_report(
+            &self,
+            spi: &mut SPI,
+        ) -> Result<u16, SpiFlashError<SPI::Error>> {
+            Ok((((self
+                .read_register_cmd(spi, Self::ECC_EXTENDED_REGISTERS[4])
+                .await?) as u16)
+                << 8)
+                + (self
+                    .read_register_cmd(spi, Self::ECC_EXTENDED_REGISTERS[3])
+                    .await? as u16))
+        }
+    }
+
+    /// For W25N that implement the output driver strength configuration
+    pub trait ODSAsync<SPI: SpiDevice, const N: usize>: ODS + SpiNandAsync<SPI, N> {
+        /// Set the output driver strength
+        async fn set_output_driver_strength(
+            &self,
+            spi: &mut SPI,
+            strength: ODSStrength,
+        ) -> Result<(), SpiFlashError<SPI::Error>> {
+            self.write_register_cmd(spi, Self::ODS_REGISTER, (strength as u8) << Self::ODS_BIT)
+                .await
+        }
+
+        /// Get the output driver strength
+        async fn get_output_driver_strength<SpiDevice>(
+            &self,
+            spi: &mut SPI,
+        ) -> Result<ODSStrength, SpiFlashError<SPI::Error>> {
+            let status = self.read_register_cmd(spi, Self::ODS_REGISTER).await?;
+            Ok(ODSStrength::from((status >> Self::ODS_BIT) & 0b11))
+        }
+    }
+
+    /// For W25N that implement the bad block management lookup table (LUT)
+    pub trait BBMAsync<SPI: SpiDevice, const N: usize, const LUT: usize>:
+        BBM<LUT> + SpiNandAsync<SPI, N>
+    {
+        /// Check if the LUT is full
+        async fn is_lut_full(&self, spi: &mut SPI) -> Result<bool, SpiFlashError<SPI::Error>> {
+            let status = self.read_register_cmd(spi, Self::LUT_FULL_REGISTER).await?;
+            Ok((status >> Self::LUT_FULL_BIT) & 0b1 == 1)
+        }
+
+        /// Read the lookup table
+        async fn read_lut_cmd(
+            &self,
+            spi: &mut SPI,
+        ) -> Result<[(BlockIndex, BlockIndex); LUT], SpiFlashError<SPI::Error>> {
+            // This reads 40 blocks. Ideally would be configured by LUT
+            let mut buf = [0; 162];
+            buf[0] = Self::READ_LUT_COMMAND;
+            spi_transfer_in_place(spi, &mut buf).await?;
+            let mut lut: [(BlockIndex, BlockIndex); LUT] =
+                [(BlockIndex::new(0), BlockIndex::new(0)); LUT];
+            for (i, chunk) in buf[2..].chunks_exact(4).enumerate().take(LUT) {
+                let block = u16::from_be_bytes([chunk[0], chunk[1]]);
+                let swap = u16::from_be_bytes([chunk[2], chunk[3]]);
+                lut[i] = (BlockIndex::new(block), BlockIndex::new(swap));
+            }
+            Ok(lut)
+        }
+
+        /// Swap a block with the lookup table
+        /// Logical is the bad block, physical is the good block it will be mapped to
+        async fn swap_block_cmd(
+            &self,
+            spi: &mut SPI,
+            logical: BlockIndex,
+            physical: BlockIndex,
+        ) -> Result<(), SpiFlashError<SPI::Error>> {
+            let mut buf = [Self::SWAP_BLOCK_COMMAND, 0, 0, 0, 0];
+            buf[1..3].copy_from_slice(&logical.as_u16().to_be_bytes());
+            buf[3..5].copy_from_slice(&physical.as_u16().to_be_bytes());
+            spi_write(spi, &mut buf).await?;
+            Ok(())
+        }
+    }
+
+    // Implement ECCBasicBlocking for ECCBasic devices
+    impl<SPI: SpiDevice, const N: usize, T: ECCBasicAsync<SPI, N>> ECCBasicAsync<SPI, N> for T {}
+    // Implement ECCBlocking for ECC devices
+    impl<SPI: SpiDevice, const N: usize, T: ECC + SpiNandAsync<SPI, N>> ECCAsync<SPI, N> for T {}
+    // Implement ODSBlocking for ODS devices
+    impl<SPI: SpiDevice, const N: usize, T: ODS + SpiNandAsync<SPI, N>> ODSAsync<SPI, N> for T {}
+    // Implement BBMBlocking for BBM devices
+    impl<SPI: SpiDevice, const N: usize, const LUT: usize, T: BBM<LUT> + SpiNandAsync<SPI, N>>
+        BBMAsync<SPI, N, LUT> for T
+    {
+    }
 
     impl<SPI: embedded_hal_async::spi::SpiDevice, const B: u32, const ID: u16>
         SpiNandAsync<SPI, 2048> for W25N<B, ID>
     {
     }
+
+    impl<SPI: embedded_hal_async::spi::SpiDevice> SpiNandAsync<SPI, 4096> for W25N04LW {}
 }
 
 #[cfg(test)]
