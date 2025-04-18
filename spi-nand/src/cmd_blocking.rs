@@ -70,11 +70,8 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         register: u8,
         mask: u8,
     ) -> Result<(), SpiFlashError<SPI::Error>> {
-        let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, register, 0];
-        spi_transfer_in_place(spi, &mut buf)?;
-        buf[2] |= mask;
-        buf[0] = Self::STATUS_REGISTER_WRITE_COMMAND;
-        spi_write(spi, &buf)
+        let data = self.read_register_cmd(spi, register)? | mask;
+        self.write_register_cmd(spi, register, data)
     }
 
     /// Clear bits in a register
@@ -84,13 +81,8 @@ pub trait SpiNandBlocking<SPI: SpiDevice, const N: usize>: SpiNand<N> {
         register: u8,
         mask: u8,
     ) -> Result<(), SpiFlashError<SPI::Error>> {
-        let mut buf = [Self::STATUS_REGISTER_READ_COMMAND, register, 0];
-        trace!("buf: {}", buf);
-        spi_transfer_in_place(spi, &mut buf)?;
-        trace!("buf: {}", buf);
-        buf[2] &= !mask;
-        buf[0] = Self::STATUS_REGISTER_WRITE_COMMAND;
-        spi_write(spi, &buf)
+        let data = self.read_register_cmd(spi, register)? & !mask;
+        self.write_register_cmd(spi, register, data)
     }
 
     /// Read a page into the device buffer/register
