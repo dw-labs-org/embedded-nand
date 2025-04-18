@@ -10,7 +10,7 @@ use embassy_stm32::gpio::Output;
 use embedded_nand::{BlockIndex, PageIndex};
 use spi_nand::cmd_blocking::SpiNandBlocking;
 use spi_nand::{SpiNand, SpiNandDevice};
-use spi_nand_devices::winbond::w25n::W25N02K;
+use spi_nand_devices::winbond::w25n::W25N02KV;
 
 use {defmt_rtt as _, panic_probe as _}; // global logger
 
@@ -73,8 +73,8 @@ async fn main(spawner: Spawner) {
             .unwrap();
 
     // Create [spi_flash::device::SpiFlash] instance
-    let device = W25N02K::new();
-    let b = <W25N02K as SpiNand<2048>>::BLOCK_COUNT;
+    let device = W25N02KV::new();
+    let b = <W25N02KV as SpiNand<2048>>::BLOCK_COUNT;
 
     let mut flash = SpiNandDevice::new(spi_dev, device);
 

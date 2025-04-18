@@ -1,3 +1,8 @@
+# TODO
+- Fix ECC impls for 4 bit ECC devices and W25N04LW
+- Add rest of ECC features
+- Async impls
+- Device types with SPI, macros
 
 ## Adding new features
 - Add a marker trait in the w25n module with any config consts required
